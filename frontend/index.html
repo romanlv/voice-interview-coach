@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Live speech-to-text transcription using Deepgram" id="pageDescription">
+  <title id="pageTitle">Live Transcription</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
+    integrity="sha512-z3gLpd7yknf1YoNbCzqRKc4qyor8gaKU1qmn+CShxbuBusANI9QpRohGBreCFkKxLhei6S9CQXFEbbKuqLg0DA=="
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="./node_modules/@deepgram/styles/dist/deepgram.css" />
+  <script type="module" src="./main.js"></script>
+
+  <style>
+    /* Layout & Background */
+    body {
+      background: var(--dg-charcoal, #1a1a1f);
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Column Styling */
+    .dg-column--sidebar-left {
+      border-right: 1px solid rgba(255, 255, 255, 0.1);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--dg-almost-black, #050506);
+      overflow-y: auto;
+      height: 100%;
+    }
+
+    .dg-column--main {
+      background: var(--dg-background, #0b0b0c);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      position: relative;
+    }
+
+    .dg-column--sidebar-right {
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--dg-almost-black, #050506);
+      overflow-y: auto;
+      height: 100%;
+    }
+
+    @media (min-width: 768px) {
+      .dg-column--sidebar-right {
+        border-top: none;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .dg-column--sidebar-left {
+        border-bottom: none;
+      }
+    }
+
+    /* Configuration Section */
+    .config-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .config-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .dg-form-label {
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+
+    /* Form Inputs */
+    .dg-input,
+    .dg-select {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: var(--dg-background, #0b0b0c);
+      border: 2px solid var(--dg-pebble, #4e4e52);
+      border-radius: 0.5rem;
+      color: var(--dg-fog, #edede2);
+      font-family: inherit;
+      font-size: 0.875rem;
+      transition: border-color 0.2s;
+    }
+
+    .dg-input:focus,
+    .dg-select:focus {
+      outline: none;
+      border-color: var(--dg-primary, #13ef95);
+    }
+
+    .dg-input::placeholder {
+      color: var(--dg-muted, #949498);
+    }
+
+    .dg-select {
+      cursor: pointer;
+    }
+
+    /* Main Content Container */
+    .main-content-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      position: relative;
+    }
+
+    /* Transcript Container */
+    .transcript-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .transcript-item {
+      background: var(--dg-almost-black, #050506);
+      border-left: 3px solid var(--dg-primary, #13ef95);
+      padding: 1rem;
+      border-radius: 0.25rem;
+      animation: fadeIn 0.3s ease-in;
+    }
+
+    .transcript-item--interim {
+      opacity: 0.6;
+      border-left-color: var(--dg-muted, #949498);
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .transcript-item__timestamp {
+      font-size: 0.7rem;
+      color: var(--dg-muted, #949498);
+      margin-bottom: 0.5rem;
+    }
+
+    .transcript-item__text {
+      color: var(--dg-text, #fbfbff);
+      line-height: 1.5;
+    }
+
+    /* Empty State */
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--dg-muted, #949498);
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .empty-state__icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    .empty-state__text {
+      font-size: 1rem;
+    }
+
+    /* Connect Overlay */
+    .connect-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--dg-background, #0b0b0c);
+      z-index: 10;
+    }
+
+    .connect-overlay.hidden {
+      display: none;
+    }
+
+    .connect-prompt {
+      text-align: center;
+      max-width: 400px;
+      padding: 2rem;
+    }
+
+    .connect-prompt__icon {
+      font-size: 4rem;
+      color: var(--dg-primary, #13ef95);
+      margin-bottom: 1.5rem;
+    }
+
+    .connect-prompt__title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--dg-text, #fbfbff);
+      margin-bottom: 0.5rem;
+    }
+
+    .connect-prompt__subtitle {
+      font-size: 1rem;
+      color: var(--dg-muted, #949498);
+      margin-bottom: 2rem;
+    }
+
+    /* Disconnect Button Container */
+    .disconnect-container {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      z-index: 20;
+    }
+
+    .disconnect-container.hidden {
+      display: none;
+    }
+
+    /* Status Grid - Match voice-agent layout */
+    .status-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .status-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .status-item__label {
+      font-size: 0.7rem;
+      color: var(--dg-muted, #949498);
+      font-weight: 500;
+    }
+
+    .status-item__value {
+      font-size: 0.875rem;
+      color: var(--dg-text, #fbfbff);
+    }
+
+    /* Status Badges */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      font-size: 0.875rem;
+    }
+
+    .status-badge--connected {
+      color: var(--dg-primary, #13ef95);
+    }
+
+    .status-badge--disconnected {
+      color: var(--dg-muted, #949498);
+    }
+
+    .status-indicator {
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .status-indicator--connected {
+      background: var(--dg-primary, #13ef95);
+    }
+
+    .status-indicator--disconnected {
+      background: var(--dg-muted, #949498);
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    /* Hidden utility */
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Header -->
+  <header class="dg-header">
+    <div class="dg-header__container">
+      <div class="dg-header__logo">
+        <span class="dg-header__logo-text" id="headerTitle">Live Transcription</span>
+      </div>
+      <nav class="dg-header__nav">
+        <a href="https://github.com/deepgram-starters/node-live-transcription" id="repoLink"
+           class="dg-btn dg-btn--ghost dg-btn--sm" target="_blank">
+          <i class="fa-brands fa-github"></i> GitHub
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Three-Column Layout -->
+  <div class="dg-columns" style="width: 100%; max-width: 100%; height: calc(100vh - 65px);">
+    <div class="dg-columns__wrapper" style="height: 100%;">
+
+      <!-- Left Sidebar: Configuration -->
+      <aside class="dg-column dg-column--sidebar-left dg-column--lg">
+        <div class="dg-content-box">
+          <h3 class="dg-form-label">Configuration</h3>
+
+          <!-- Model Select -->
+          <div class="config-section">
+            <label class="dg-form-label" for="model-select">
+              <i class="fa-solid fa-brain"></i> Model
+            </label>
+            <select id="model-select" class="dg-select">
+              <option value="nova-3">nova-3</option>
+              <option value="nova-2">nova-2</option>
+              <option value="nova">nova</option>
+              <option value="enhanced">enhanced</option>
+              <option value="base">base</option>
+            </select>
+          </div>
+
+          <!-- Language Input -->
+          <div class="config-section">
+            <label class="dg-form-label" for="language-input">
+              <i class="fa-solid fa-language"></i> Language
+            </label>
+            <input
+              type="text"
+              id="language-input"
+              class="dg-input"
+              value="en"
+              placeholder="en"
+            />
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Content: Transcript Display -->
+      <main class="dg-column dg-column--main">
+        <div class="main-content-container">
+          <!-- Connect Overlay -->
+          <div class="connect-overlay" id="connect-overlay">
+            <div class="connect-prompt">
+              <div class="connect-prompt__icon">
+                <i class="fa-solid fa-microphone"></i>
+              </div>
+              <h2 class="connect-prompt__title">Live Transcription Ready</h2>
+              <p class="connect-prompt__subtitle">Configure settings and click Connect to start</p>
+              <button type="button" id="connect-btn" class="dg-btn dg-btn--primary dg-btn--lg">
+                <i class="fa-solid fa-plug"></i> Connect
+              </button>
+            </div>
+          </div>
+
+          <!-- Disconnect Button -->
+          <div class="disconnect-container hidden" id="disconnect-container">
+            <button type="button" id="disconnect-btn" class="dg-btn dg-btn--secondary dg-btn--sm">
+              <i class="fa-solid fa-plug-circle-xmark"></i> Disconnect
+            </button>
+          </div>
+
+          <!-- Transcript Container -->
+          <div class="transcript-container hidden" id="transcript-container">
+            <div class="empty-state" id="empty-state">
+              <div class="empty-state__icon">
+                <i class="fa-solid fa-microphone"></i>
+              </div>
+              <p class="empty-state__text">Waiting for audio...</p>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Right Sidebar: Status & Stats -->
+      <aside class="dg-column dg-column--sidebar-right">
+        <div class="dg-content-box">
+          <h3 class="dg-form-label" style="margin-bottom: 1rem;">Status</h3>
+          <div class="status-grid">
+            <div class="status-item">
+              <div class="status-item__label">Connection</div>
+              <div class="status-item__value">
+                <span class="status-badge status-badge--disconnected" id="connection-status">
+                  <span class="status-indicator status-indicator--disconnected"></span>
+                  Disconnected
+                </span>
+              </div>
+            </div>
+            <div class="status-item">
+              <div class="status-item__label">Microphone</div>
+              <div class="status-item__value" id="mic-status">Inactive</div>
+            </div>
+            <div class="status-item">
+              <div class="status-item__label">Model</div>
+              <div class="status-item__value" id="current-model">-</div>
+            </div>
+            <div class="status-item">
+              <div class="status-item__label">Language</div>
+              <div class="status-item__value" id="current-language">-</div>
+            </div>
+            <div class="status-item">
+              <div class="status-item__label">Messages Received</div>
+              <div class="status-item__value" id="message-count">0</div>
+            </div>
+            <div class="status-item">
+              <div class="status-item__label">Final Transcripts</div>
+              <div class="status-item__value" id="final-count">0</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</body>
+
+</html>
