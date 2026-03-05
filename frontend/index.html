@@ -22,11 +22,9 @@
 
     /* Column Styling */
     .dg-column--sidebar-left {
-      border-right: 1px solid rgba(255, 255, 255, 0.1);
       border-bottom: 1px solid rgba(255, 255, 255, 0.1);
       background: var(--dg-almost-black, #050506);
       overflow-y: auto;
-      height: 100%;
     }
 
     .dg-column--main {
@@ -34,27 +32,34 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      height: 100%;
+      min-height: 60vh;
       position: relative;
     }
 
     .dg-column--sidebar-right {
-      border-left: 1px solid rgba(255, 255, 255, 0.1);
       border-top: 1px solid rgba(255, 255, 255, 0.1);
       background: var(--dg-almost-black, #050506);
       overflow-y: auto;
-      height: 100%;
     }
 
     @media (min-width: 768px) {
       .dg-column--sidebar-right {
         border-top: none;
+        border-left: 1px solid rgba(255, 255, 255, 0.1);
+        height: 100%;
       }
     }
 
     @media (min-width: 1024px) {
       .dg-column--sidebar-left {
         border-bottom: none;
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        height: 100%;
+      }
+
+      .dg-column--main {
+        height: 100%;
+        min-height: 0;
       }
     }
 
@@ -296,6 +301,40 @@
       }
     }
 
+    /* Mobile adjustments */
+    @media (max-width: 767px) {
+      .connect-prompt__icon {
+        font-size: 3rem;
+      }
+
+      .connect-prompt__title {
+        font-size: 1.25rem;
+      }
+
+      .connect-prompt__subtitle {
+        font-size: 0.875rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .transcript-container {
+        padding: 1rem;
+      }
+
+      .transcript-item {
+        padding: 0.75rem;
+      }
+
+      .status-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .disconnect-container {
+        top: 0.5rem;
+        right: 0.5rem;
+      }
+    }
+
     /* Hidden utility */
     .hidden {
       display: none !important;
@@ -320,8 +359,8 @@
   </header>
 
   <!-- Three-Column Layout -->
-  <div class="dg-columns" style="width: 100%; max-width: 100%; height: calc(100vh - 65px);">
-    <div class="dg-columns__wrapper" style="height: 100%;">
+  <div class="dg-columns" style="width: 100%; max-width: 100%; min-height: calc(100vh - 65px);">
+    <div class="dg-columns__wrapper" style="min-height: 0;">
 
       <!-- Left Sidebar: Configuration -->
       <aside class="dg-column dg-column--sidebar-left dg-column--lg">
