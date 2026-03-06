@@ -137,6 +137,11 @@
       border-left-color: var(--dg-muted, #949498);
     }
 
+    .transcript-item--agent {
+      border-left-color: #4da6ff;
+      background: rgba(77, 166, 255, 0.05);
+    }
+
     @keyframes fadeIn {
       from {
         opacity: 0;
@@ -394,6 +399,40 @@
               placeholder="en"
             />
           </div>
+
+          <!-- TTS Voice Select -->
+          <div class="config-section">
+            <label class="dg-form-label" for="tts-voice-select">
+              <i class="fa-solid fa-volume-high"></i> AI Voice
+            </label>
+            <select id="tts-voice-select" class="dg-select">
+              <optgroup label="Feminine">
+                <option value="thalia" selected>Thalia - Clear, Confident</option>
+                <option value="andromeda">Andromeda - Casual, Expressive</option>
+                <option value="helena">Helena - Caring, Friendly</option>
+                <option value="asteria">Asteria - Confident, Knowledgeable</option>
+                <option value="athena">Athena - Calm, Professional</option>
+                <option value="aurora">Aurora - Cheerful, Energetic</option>
+                <option value="harmonia">Harmonia - Empathetic, Calm</option>
+                <option value="hera">Hera - Smooth, Professional</option>
+                <option value="luna">Luna - Friendly, Natural</option>
+                <option value="pandora">Pandora - Smooth, British</option>
+                <option value="vesta">Vesta - Patient, Empathetic</option>
+              </optgroup>
+              <optgroup label="Masculine">
+                <option value="apollo">Apollo - Confident, Casual</option>
+                <option value="arcas">Arcas - Natural, Smooth</option>
+                <option value="aries">Aries - Warm, Energetic</option>
+                <option value="atlas">Atlas - Enthusiastic, Friendly</option>
+                <option value="draco">Draco - Warm, British</option>
+                <option value="hermes">Hermes - Expressive, Professional</option>
+                <option value="jupiter">Jupiter - Knowledgeable, Deep</option>
+                <option value="orion">Orion - Calm, Polite</option>
+                <option value="orpheus">Orpheus - Professional, Confident</option>
+                <option value="zeus">Zeus - Deep, Trustworthy</option>
+              </optgroup>
+            </select>
+          </div>
         </div>
       </aside>
 
@@ -466,6 +505,10 @@
             <div class="status-item">
               <div class="status-item__label">Final Transcripts</div>
               <div class="status-item__value" id="final-count">0</div>
+            </div>
+            <div class="status-item">
+              <div class="status-item__label">Agent State</div>
+              <div class="status-item__value" id="agent-state">-</div>
             </div>
           </div>
         </div>

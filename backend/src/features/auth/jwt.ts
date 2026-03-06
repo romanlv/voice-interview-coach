@@ -40,10 +40,6 @@ export async function sign(
   return `${data}.${base64url(sig)}`;
 }
 
-/**
- * Synchronous JWT verification using Bun's native CryptoHasher.
- * Required because Bun's server.upgrade() must be called synchronously.
- */
 export function verifySync(
   token: string,
   secret: string,
