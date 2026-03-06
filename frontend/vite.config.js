@@ -3,7 +3,7 @@ import mkcert from 'vite-plugin-mkcert';
 
 export default defineConfig({
   plugins: [mkcert()],
-  root: '.',
+  root: 'src',
   base: './',
   server: {
     port: 8080,
@@ -24,7 +24,7 @@ export default defineConfig({
     host: true
   },
   build: {
-    outDir: 'dist',
+    outDir: '../dist',
     emptyOutDir: true,
     rollupOptions: {
       output: {

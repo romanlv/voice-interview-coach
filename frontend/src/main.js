@@ -1,3 +1,4 @@
+import '@deepgram/styles/dist/deepgram.css';
 import { initElements, elements, loadMetadata } from './features/config/settings.js';
 import { initRenderer } from './features/transcript/renderer.js';
 import { initAudioContext, startMicrophone, stopMicrophone } from './features/audio/mic-capture.js';
