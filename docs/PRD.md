@@ -67,12 +67,14 @@ features/
     tts.ts                      ← Deepgram Aura-2 REST, stream reader
   llm/
     client.ts                   ← Anthropic SDK wrapper, streaming, abort
-    prompts.ts                  ← System prompt templates (interview/practice)
+    prompts.ts                  ← System prompt builder (assembles interviewer + position + resume)
     history.ts                  ← Conversation history management
   storage/
-    session-writer.ts           ← Session MD file generation
-    coaching-notes.ts           ← Coaching notes merge
+    session-writer.ts           ← Session MD file generation (transcript + frontmatter)
+    notes.ts                    ← Coaching notes read/merge
     candidates.ts               ← Resume loading, candidate listing
+    interviewers.ts             ← Interviewer persona loading, listing
+    positions.ts                ← Position description loading, listing
 ```
 
 ### Frontend (`frontend/`)
@@ -94,42 +96,119 @@ features/
     coaching-tip.js             ← Tip box display
     state-display.js            ← LISTENING/THINKING/SPEAKING indicator
   config/
-    settings.js                 ← Model, language, mode controls
+    settings.js                 ← Interviewer, position, model, language controls
 ```
 
 ---
 
 ## Modes
 
-### Interview Mode
-The AI acts as a professional interviewer. Questions are generated based on the candidate's resume. After each answer the AI responds verbally, then rates the answer and gives a coaching tip (shown in the UI, not spoken).
+The interview experience is shaped by two independent selections:
 
-### Practice Mode
+1. **Interviewer persona** (required) — defines tone, question style, and evaluation focus (e.g. recruiter vs technical vs hiring manager)
+2. **Mode** — defines the overall session structure
+
+### Current (v1)
+Single mode: the AI acts as a conversational interview coach using the selected interviewer persona. It asks questions, listens, gives brief spoken feedback, and moves to the next question. All responses are plain text — no ratings or structured coaching metadata.
+
+### Planned: Interview Mode
+The AI acts as a professional interviewer in character. Questions are generated based on the candidate's resume and the selected position (if any). After each answer the AI responds verbally, then rates the answer and gives a coaching tip (shown in the UI, not spoken).
+
+### Planned: Practice Mode
 The candidate selects a skill or topic area. The AI runs a focused drill — more forgiving tone, more explicit coaching, encourages retries. Good for targeted preparation before a real interview.
 
 ---
 
-## File Structure
+## Data Structure
+
+All runtime data lives under `/data`. Content is markdown files — human-readable, portable, and easy to version.
 
 ```
-/candidates
-  /{candidate-slug}/
-    resume.md                    ← source of truth for question generation
-    session-YYYY-MM-DD-HH-mm.md  ← full transcript + per-answer ratings
-    coaching-notes.md            ← accumulated weak areas across sessions
+/data
+  candidates/
+    {candidate-slug}/
+      resume.md                          ← source of truth for question generation
+      notes.md                           ← accumulated coaching insights across sessions
+      sessions/
+        YYYY-MM-DD-HHmm.md              ← immutable session transcript + frontmatter
+
+  interviewers/
+    recruiter.md                         ← persona prompt + behavior guidelines
+    technical.md
+    manager.md
+
+  positions/                             ← optional, omit to run a general interview
+    staff-frontend-engineer.md           ← job description, requirements, focus areas
+    backend-tech-lead.md
 ```
 
-### Session File Format
+### Interviewers
+
+Each file defines an interviewer persona that shapes how the AI conducts the session — tone, question style, evaluation focus. The filename (without `.md`) is the persona ID used in session config and frontmatter.
+
+Example (`data/interviewers/technical.md`):
+```markdown
+# Technical Interviewer
+
+You are a senior engineer conducting a technical interview.
+
+## Focus
+- System design and architecture decisions
+- Code quality, testing, and trade-offs
+- Depth of understanding vs surface-level answers
+
+## Style
+- Direct and specific follow-up questions
+- Ask "why" and "what trade-offs did you consider"
+- Neutral tone — neither encouraging nor discouraging
+```
+
+### Positions (optional)
+
+Each file describes a target role. When selected, the position context is included in the system prompt so questions and evaluation are tailored to the role's requirements.
+
+Example (`data/positions/staff-frontend-engineer.md`):
+```markdown
+# Staff Frontend Engineer
+
+## Requirements
+- 8+ years frontend experience
+- React/TypeScript expertise
+- System design for large-scale SPAs
+- Cross-team technical leadership
+
+## Focus Areas
+- Architecture and scalability
+- Performance optimization
+- Mentoring and technical decision-making
+```
+
+### Sessions
+
+Sessions are immutable transcripts — one file per interview, never modified after creation. Frontmatter captures the session configuration for filtering and aggregation.
 
 ```markdown
-# Session: 2025-03-05 14:30
-## Mode: Interview
+---
+interviewer: technical
+position: staff-frontend-engineer       # omitted if no position selected
+date: 2025-03-05T14:30:00
+duration: 23m
+score: 7.2
+---
+
+# Session Transcript
 
 ### Q1 — React Architecture
-**Question:** Walk me through how you'd structure a large React app.
-**Answer:** [transcript]
+**Interviewer:** Walk me through how you'd structure a large React app.
+**Candidate:** [transcript]
 **Rating:** 7/10
 **Tip:** Lead with the problem you were solving before describing the solution.
+
+### Q2 — State Management
+**Interviewer:** How do you decide between local and global state?
+**Candidate:** [transcript]
+**Rating:** 8/10
+**Tip:** Good trade-off analysis. Could mention performance implications.
 
 ---
 
@@ -138,6 +217,28 @@ The candidate selects a skill or topic area. The AI runs a focused drill — mor
 **Strongest Areas:** TypeScript, System Design
 **Needs Work:** Behavioural answers, conciseness
 **Next Steps:** Practice STAR-format answers for Q3, Q5
+```
+
+### Coaching Notes
+
+Per-candidate file that accumulates insights across sessions. Updated by Claude at session end — merges new observations with existing notes rather than appending blindly.
+
+```markdown
+# Coaching Notes — Roman
+
+## Strengths
+- System design explanations are clear and structured
+- Good at relating past experience to the question
+
+## Needs Work
+- Behavioral answers lack STAR structure (sessions: 2025-03-05, 2025-03-06)
+- Tends to go long — aim for 90 seconds per answer
+
+## Session Log
+| Date | Interviewer | Position | Score |
+|------|-------------|----------|-------|
+| 2025-03-05 | technical | staff-frontend | 7.2 |
+| 2025-03-06 | recruiter | — | 6.8 |
 ```
 
 ---
@@ -152,12 +253,11 @@ Browser → Backend (upstream):
 
 Backend → Browser (downstream), all as JSON or binary:
   1. Deepgram transcript events (interim + final) → browser renders live
-  2. On utterance_end → backend triggers Claude (streaming)
-       system prompt: resume + history + mode + instructions
-       response: { spoken_response, rating, coaching_tip, skill_area }
-  3. Claude spoken_response → Deepgram Aura-2 TTS → audio chunks (binary) → browser plays back
-  4. Claude rating/tip/skill_area → JSON message → browser renders in UI
-  5. Structured result written to session MD file on disk
+  2. On utterance_end → backend triggers Claude
+       system prompt: interviewer persona + position (optional) + resume + history
+       response: plain text (spoken aloud via TTS)
+  3. Claude response text → JSON agent_response message → browser renders in transcript
+  4. Claude response text → Deepgram Aura-2 TTS → audio chunks (binary) → browser plays back
 ```
 
 **Target latency to first audio:** ~1 second from end of user speech.
@@ -216,7 +316,7 @@ IDLE → LISTENING → THINKING → SPEAKING → LISTENING → ...
 |---|---|---|
 | Transcript | JSON string (Deepgram `channel.alternatives`) | Interim + final STT results |
 | TTS audio | binary (Int16 PCM, 24kHz) | Audio chunks for playback (only binary messages on the connection) |
-| Agent response | `{"type":"agent_response", "rating":7, "coaching_tip":"...", "skill_area":"..."}` | UI metadata from Claude |
+| Agent response | `{"type":"agent_response", "text":"..."}` | Claude's plain text response for transcript display |
 | TTS end | `{"type":"tts_end"}` | Signals end of audio stream |
 | State | `{"type":"state", "state":"LISTENING\|THINKING\|SPEAKING"}` | State transitions for UI sync |
 
@@ -233,42 +333,43 @@ IDLE → LISTENING → THINKING → SPEAKING → LISTENING → ...
 
 ## Claude Prompt Structure
 
-### System Prompt (both modes)
+The system prompt is assembled at session start from three sources:
+
+1. **Interviewer persona** (required) — loaded from `data/interviewers/{id}.md`
+2. **Position context** (optional) — loaded from `data/positions/{id}.md`
+3. **Candidate resume** (required) — loaded from `data/candidates/{slug}/resume.md`
+
+These are composed into a single system prompt by `prompts.ts`:
 
 ```
-You are an AI interview coach. The candidate's resume is below.
-Ask one question at a time. After each answer, respond in JSON:
+[Interviewer persona content]
 
-{
-  "spoken_response": "...",   // what gets spoken aloud — includes conversational feedback + next question
-  "rating": 7,                // 1–10, based on clarity, depth, relevance
-  "coaching_tip": "...",      // 1–2 sentences, specific and actionable (shown in UI, not spoken)
-  "skill_area": "..."         // e.g. "System Design", "Behavioural"
-}
+[If position selected:]
+## Target Position
+[Position file content]
 
-For the opening turn (no candidate answer yet), omit rating/coaching_tip/skill_area
-and use spoken_response to introduce yourself and ask the first question.
+## Candidate Resume
+[Resume file content]
 
-Only return valid JSON. No markdown, no preamble.
-
-[RESUME]
-{resume_content}
-
-[MODE]
-{interview | practice}
-
-[HISTORY]
-{conversation_history}
+## Guidelines
+- Keep your responses concise (2-4 sentences max) — they will be spoken aloud
+- Ask one question at a time, wait for the response
+- Respond in plain text only — no JSON, no markdown, no formatting
+- Start by greeting the candidate and asking your first question. Keep the greeting brief.
 ```
 
-Conversation history is maintained server-side in memory for the duration of the WebSocket connection. Each turn appends the user's transcript and Claude's response. History is discarded when the connection closes (persisted version lives in the session MD file).
+Claude returns plain text that is both displayed in the transcript and sent to TTS for spoken playback. No structured JSON parsing is needed.
+
+Conversation history is maintained server-side in memory for the duration of the WebSocket connection. Each turn appends the user's transcript and Claude's response. History is discarded when the connection closes.
+
+> **Future enhancement:** Add structured JSON response format with `rating`, `coaching_tip`, and `skill_area` fields to enable per-answer scoring and coaching UI.
 
 ---
 
 ## UI
 
 - **Three-column layout:** config sidebar (left), transcript (center), status (right)
-- **Config sidebar:** Model selector (nova-3/nova-2/nova/enhanced/base), language input
+- **Config sidebar:** Interviewer selector, position selector (optional), model selector (nova-3/nova-2/nova/enhanced/base), language input
 - **Transcript panel:** Real-time transcript with interim (faded) and final results, timestamped
 - **Status sidebar:** Connection status (with indicator dot), microphone status, current model/language, message count, final transcript count
 - **Connect/Disconnect:** Overlay with connect button, disconnect button appears when connected
@@ -289,8 +390,10 @@ No authentication UI. Runs on `localhost:8081` (backend) + `localhost:5173` (Vit
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/session/end` | POST | Triggers summary generation, writes `coaching-notes.md` |
+| `/api/session/end` | POST | Triggers summary generation, updates `notes.md` |
 | `/api/candidates` | GET | Lists candidate folders |
+| `/api/interviewers` | GET | Lists available interviewer personas |
+| `/api/positions` | GET | Lists available positions (may be empty) |
 
 > **Design decision:** The full voice pipeline (STT → Claude → TTS) runs over the single `/api/voice` WebSocket. When `utterance_end` fires, the backend triggers Claude and streams TTS audio back over the same connection. No separate endpoint for the LLM/TTS step.
 
@@ -309,7 +412,7 @@ On session end, Claude receives the full session transcript and outputs:
 }
 ```
 
-This is written to `session-YYYY-MM-DD.md` and merged into `coaching-notes.md`.
+The summary is appended to the session file. Insights are merged into `data/candidates/{slug}/notes.md`.
 
 ---
 
@@ -321,15 +424,20 @@ This is written to `session-YYYY-MM-DD.md` and merged into `coaching-notes.md`.
 - [x] Browser microphone capture (AudioContext, 16kHz linear16 PCM)
 - [x] Real-time transcript rendering with interim/final states
 - [x] Three-column UI with config, transcript, and status panels
-- [ ] Claude streaming integration with dual-mode prompts
+- [x] Claude integration with plain text responses
 - [ ] Deepgram Aura-2 TTS — linear16 PCM streamed over WebSocket, Web Audio API playback
 - [ ] Voice agent state machine (LISTENING/THINKING/SPEAKING/INTERRUPTED)
 - [ ] Barge-in support (interrupt TTS on user speech)
 - [ ] Resume loading from candidate folder
-- [ ] Session MD writer
+- [ ] Interviewer persona loading + selector UI
+- [ ] Position loading + selector UI (optional)
+- [ ] System prompt assembly (interviewer + position + resume)
+- [ ] Session MD writer (transcript + frontmatter)
+- [ ] Coaching notes generation + merge
+- [ ] Structured response format (rating, coaching tip, skill area)
 - [ ] Rating badge + coaching tip display in UI
 - [ ] Mode toggle (Interview ↔ Practice)
-- [ ] Session summary + coaching-notes merge
+- [ ] Session summary generation
 
 ## Out of Scope (v1)
 
@@ -344,6 +452,5 @@ This is written to `session-YYYY-MM-DD.md` and merged into `coaching-notes.md`.
 ## Open Questions
 
 - Resume format: plain `.md` only for now, PDF parsing as follow-up
-- Coaching notes merge strategy: append-only vs summarise periodically
 - Question bank: fully dynamic from Claude each session, or pre-generate a set at session start and follow a plan?
 - Frontend consolidation: consider migrating from Vite to Bun's built-in HTML imports for single-server setup

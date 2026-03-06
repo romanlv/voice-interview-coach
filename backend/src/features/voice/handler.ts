@@ -4,6 +4,11 @@ import { VoiceStateMachine } from "./state-machine.ts";
 import { ConversationHistory } from "../llm/history.ts";
 import { queryLLM } from "../llm/client.ts";
 import { streamTTS } from "./tts.ts";
+import { buildSystemPrompt } from "../llm/prompts.ts";
+import { loadInterviewer } from "../storage/interviewers.ts";
+import { loadResume } from "../storage/candidates.ts";
+import { loadPosition } from "../storage/positions.ts";
+import { saveSession } from "../storage/session-writer.ts";
 
 export type WsData = {
   createdAt: number;
@@ -15,6 +20,12 @@ export type WsData = {
   history: ConversationHistory;
   pendingTranscript: string;
   abortController: AbortController | null;
+  systemPrompt: string;
+  promptReady: Promise<void> | null;
+  candidate: string;
+  interviewer: string;
+  position: string;
+  mode: string;
 };
 
 export function createWsData(queryParams: URLSearchParams): WsData {
@@ -28,7 +39,41 @@ export function createWsData(queryParams: URLSearchParams): WsData {
     history: new ConversationHistory(),
     pendingTranscript: "",
     abortController: null,
+    systemPrompt: "",
+    promptReady: null,
+    candidate: queryParams.get("candidate") || "",
+    interviewer: queryParams.get("interviewer") || "",
+    position: queryParams.get("position") || "",
+    mode: queryParams.get("mode") || "interview",
   };
+}
+
+async function loadPromptConfig(ws: ServerWebSocket<WsData>): Promise<void> {
+  try {
+    const interviewerContent = ws.data.interviewer
+      ? await loadInterviewer(ws.data.interviewer)
+      : "";
+    const resumeContent = ws.data.candidate
+      ? await loadResume(ws.data.candidate)
+      : "";
+    const positionContent = ws.data.position
+      ? await loadPosition(ws.data.position)
+      : undefined;
+
+    ws.data.systemPrompt = buildSystemPrompt({
+      interviewer: interviewerContent,
+      resume: resumeContent,
+      position: positionContent,
+      mode: ws.data.mode as "practice" | "interview",
+    });
+  } catch (err) {
+    console.error("Failed to load prompt config:", err);
+    ws.data.systemPrompt = buildSystemPrompt({
+      interviewer: "You are a general interviewer.",
+      resume: "",
+      mode: "interview",
+    });
+  }
 }
 
 export function handleOpen(ws: ServerWebSocket<WsData>, apiKey: string) {
@@ -36,6 +81,10 @@ export function handleOpen(ws: ServerWebSocket<WsData>, apiKey: string) {
 
   const stateMachine = new VoiceStateMachine(ws);
   ws.data.stateMachine = stateMachine;
+
+  // Load config in background — Deepgram connects immediately so no audio is dropped.
+  // processUserTurn awaits promptReady before calling LLM.
+  ws.data.promptReady = loadPromptConfig(ws);
 
   const dgWs = createDeepgramSTT(apiKey, ws.data.queryParams, {
     onTranscript: (data) => {
@@ -108,9 +157,13 @@ async function processUserTurn(
   sm.transition("THINKING");
 
   try {
+    // Ensure prompt is loaded before first LLM call
+    if (ws.data.promptReady) await ws.data.promptReady;
+
     const responseText = await queryLLM(
       text,
       ws.data.history,
+      ws.data.systemPrompt,
       abortController.signal,
     );
 
@@ -196,6 +249,20 @@ export function handleClose(ws: ServerWebSocket<WsData>) {
     ws.data.abortController.abort();
     ws.data.abortController = null;
   }
+
+  // Save session transcript (fire-and-forget)
+  const messages = ws.data.history.getMessages();
+  if (messages.length > 0 && ws.data.candidate) {
+    saveSession({
+      candidate: ws.data.candidate,
+      interviewer: ws.data.interviewer,
+      position: ws.data.position || undefined,
+      mode: ws.data.mode,
+      startTime: ws.data.createdAt,
+      history: messages,
+    }).catch((err) => console.error("Failed to save session on close:", err));
+  }
+
   const dgWs = ws.data.deepgramWs;
   if (dgWs && dgWs.readyState === WebSocket.OPEN) {
     dgWs.close(1000, "Client disconnected");

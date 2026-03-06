@@ -24,6 +24,18 @@ export interface SessionConfig {
   model: string;
   language: string;
   ttsVoice: string;
+  candidate: string;
+  interviewer: string;
+  position: string;
+  mode: "practice" | "interview";
+}
+
+export interface SessionSummary {
+  score: number;
+  strengths: string[];
+  needsWork: string[];
+  nextSteps: string[];
+  summary: string;
 }
 
 export type ConnectionState = "disconnected" | "connecting" | "connected";
@@ -44,6 +56,7 @@ export function useVoiceSession() {
   const ttsRef = useRef<TTSPlayer>(new TTSPlayer());
   const sessionTokenRef = useRef<string | null>(null);
   const agentStateRef = useRef<AgentState>("LISTENING");
+  const startTimeRef = useRef<number>(0);
 
   const addTranscript = useCallback(
     (text: string, isFinal: boolean, isAgent: boolean) => {
@@ -149,6 +162,7 @@ export function useVoiceSession() {
   const connect = useCallback(
     async (config: SessionConfig) => {
       setConnectionState("connecting");
+      startTimeRef.current = Date.now();
       try {
         const token = await getSessionToken();
 
@@ -159,7 +173,13 @@ export function useVoiceSession() {
           sample_rate: "16000",
           channels: "1",
           tts_voice: config.ttsVoice || "thalia",
+          candidate: config.candidate,
+          interviewer: config.interviewer,
+          mode: config.mode,
         });
+        if (config.position) {
+          params.set("position", config.position);
+        }
         const wsUrl = new URL(`api/voice?${params}`, document.baseURI);
         wsUrl.protocol =
           wsUrl.protocol === "https:" ? "wss:" : "ws:";
@@ -188,7 +208,6 @@ export function useVoiceSession() {
             setTimeout(() => {
               setConnectionState("disconnected");
               setMicActive(false);
-              setActiveConfig(null);
             }, 2000);
           };
         });
@@ -223,9 +242,41 @@ export function useVoiceSession() {
     setAgentState("LISTENING");
     setConnectionState("disconnected");
     setMicActive(false);
-    setActiveConfig(null);
     setStats({ messages: 0, finals: 0 });
   }, []);
+
+  const endSession = useCallback(async (): Promise<SessionSummary | null> => {
+    if (!activeConfig) return null;
+
+    // Build history from transcripts
+    const history = transcripts
+      .filter((t) => t.isFinal)
+      .map((t) => ({
+        role: t.isAgent ? "assistant" : "user",
+        content: t.text,
+      }));
+
+    // Disconnect first
+    disconnect();
+
+    if (history.length === 0) return null;
+
+    const response = await fetch("api/session/end", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        candidate: activeConfig.candidate,
+        interviewer: activeConfig.interviewer,
+        position: activeConfig.position || undefined,
+        mode: activeConfig.mode,
+        startTime: startTimeRef.current,
+        history,
+      }),
+    });
+
+    if (!response.ok) throw new Error("Failed to end session");
+    return response.json();
+  }, [activeConfig, transcripts, disconnect]);
 
   return {
     connectionState,
@@ -236,5 +287,6 @@ export function useVoiceSession() {
     activeConfig,
     connect,
     disconnect,
+    endSession,
   };
 }

@@ -7,6 +7,12 @@ import {
   handleMessage,
   handleClose,
 } from "./features/voice/handler.ts";
+import { listCandidates } from "./features/storage/candidates.ts";
+import { listInterviewers } from "./features/storage/interviewers.ts";
+import { listPositions } from "./features/storage/positions.ts";
+import { saveSession } from "./features/storage/session-writer.ts";
+import { loadNotes, generateAndMergeNotes } from "./features/storage/notes.ts";
+import { generateSessionSummary } from "./features/llm/client.ts";
 
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY;
 if (!DEEPGRAM_API_KEY) {
@@ -27,20 +33,76 @@ const server = Bun.serve({
   hostname: HOST,
   port: PORT,
 
+  routes: {
+    "/api/session": {
+      GET: () => handleSession(SESSION_SECRET)(),
+    },
+
+    "/api/metadata": {
+      GET: () =>
+        Response.json({
+          title: "AI Interview Coach",
+          description: "Voice-based AI interview practice",
+        }),
+    },
+
+    "/api/candidates": {
+      GET: async () => Response.json(await listCandidates()),
+    },
+
+    "/api/interviewers": {
+      GET: async () => Response.json(await listInterviewers()),
+    },
+
+    "/api/positions": {
+      GET: async () => Response.json(await listPositions()),
+    },
+
+    "/api/session/end": {
+      POST: async (req) => {
+        try {
+          const body = (await req.json()) as {
+            candidate: string;
+            interviewer: string;
+            position?: string;
+            mode: string;
+            history: { role: string; content: string }[];
+            startTime?: number;
+          };
+          const { candidate, interviewer, position, mode, history, startTime } =
+            body;
+
+          const summary = await generateSessionSummary(history);
+
+          await saveSession({
+            candidate,
+            interviewer,
+            position,
+            mode,
+            startTime: startTime || Date.now(),
+            history,
+          });
+
+          const existingNotes = await loadNotes(candidate);
+          generateAndMergeNotes(candidate, history, existingNotes).catch(
+            (err) => console.error("Notes generation failed:", err),
+          );
+
+          return Response.json(summary);
+        } catch (err) {
+          console.error("Session end error:", err);
+          return Response.json(
+            { error: "Failed to process session end" },
+            { status: 500 },
+          );
+        }
+      },
+    },
+  },
+
+  // WebSocket upgrade must go through fetch fallback
   fetch(req, server) {
     const url = new URL(req.url);
-    console.log("req", url.pathname);
-
-    if (url.pathname === "/api/session" && req.method === "GET") {
-      return handleSession(SESSION_SECRET)();
-    }
-
-    if (url.pathname === "/api/metadata" && req.method === "GET") {
-      return Response.json({
-        title: "AI Interview Coach",
-        description: "Voice-based AI interview practice",
-      });
-    }
 
     if (url.pathname === "/api/voice") {
       const protocols = req.headers.get("sec-websocket-protocol") || "";
