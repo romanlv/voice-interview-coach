@@ -1,10 +1,18 @@
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import mkcert from 'vite-plugin-mkcert';
+import path from 'path';
 
 export default defineConfig({
-  plugins: [mkcert()],
+  plugins: [react(), tailwindcss(), mkcert()],
   root: 'src',
   base: './',
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   server: {
     port: 8080,
     strictPort: true,
