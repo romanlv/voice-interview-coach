@@ -4,6 +4,9 @@ export class TTSPlayer {
     this.nextPlayTime = 0;
     this.sources = [];
     this.remainder = null;
+    this.onPlayStart = null;
+    this.onPlayStop = null;
+    this._started = false;
   }
 
   async init() {
@@ -79,9 +82,19 @@ export class TTSPlayer {
     this.nextPlayTime = startTime + audioBuffer.duration;
 
     this.sources.push(source);
+
+    if (!this._started && this.onPlayStart) {
+      this._started = true;
+      this.onPlayStart();
+    }
+
     source.onended = () => {
       const idx = this.sources.indexOf(source);
       if (idx !== -1) this.sources.splice(idx, 1);
+      if (this.sources.length === 0 && this._started) {
+        this._started = false;
+        if (this.onPlayStop) this.onPlayStop();
+      }
     };
   }
 
@@ -99,5 +112,7 @@ export class TTSPlayer {
     this.nextPlayTime = 0;
     this.remainder = null;
     this._chunkCount = 0;
+    this._started = false;
+    if (this.onPlayStop) this.onPlayStop();
   }
 }

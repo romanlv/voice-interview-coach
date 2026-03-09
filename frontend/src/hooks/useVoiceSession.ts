@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useReducer, useRef, useCallback } from "react";
 import { TTSPlayer } from "../features/audio/tts-player.js";
 import {
   initAudioContext,
@@ -8,9 +8,16 @@ import {
 import {
   MSG_STATE,
   MSG_AGENT_RESPONSE,
+  MSG_AGENT_RESPONSE_INTERRUPTED,
   MSG_TTS_END,
   MSG_INTERRUPT,
 } from "../features/connection/protocol.js";
+import {
+  voiceSessionReducer,
+  initialState,
+  canBargeIn,
+  type VoiceSessionState,
+} from "./voiceSessionReducer";
 
 export interface TranscriptItem {
   id: number;
@@ -44,43 +51,21 @@ export type AgentState = "LISTENING" | "THINKING" | "SPEAKING";
 let nextId = 0;
 
 export function useVoiceSession() {
-  const [connectionState, setConnectionState] =
-    useState<ConnectionState>("disconnected");
-  const [agentState, setAgentState] = useState<AgentState>("LISTENING");
-  const [micActive, setMicActive] = useState(false);
-  const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
-  const [stats, setStats] = useState({ messages: 0, finals: 0 });
-  const [activeConfig, setActiveConfig] = useState<SessionConfig | null>(null);
+  const [state, dispatch] = useReducer(voiceSessionReducer, initialState);
+  const stateRef = useRef<VoiceSessionState>(initialState);
+
+  // Keep stateRef in sync — assigned after every render
+  stateRef.current = state;
 
   const wsRef = useRef<WebSocket | null>(null);
   const ttsRef = useRef<TTSPlayer>(new TTSPlayer());
   const sessionTokenRef = useRef<string | null>(null);
-  const agentStateRef = useRef<AgentState>("LISTENING");
   const startTimeRef = useRef<number>(0);
 
-  const addTranscript = useCallback(
-    (text: string, isFinal: boolean, isAgent: boolean) => {
-      const item: TranscriptItem = {
-        id: nextId++,
-        text,
-        isFinal,
-        isAgent,
-        timestamp: (isAgent ? "AI - " : "") + new Date().toLocaleTimeString(),
-      };
-
-      setTranscripts((prev) => {
-        // Replace last interim with new interim (for user speech)
-        if (!isFinal && !isAgent && prev.length > 0) {
-          const last = prev[prev.length - 1];
-          if (!last.isFinal && !last.isAgent) {
-            return [...prev.slice(0, -1), item];
-          }
-        }
-        return [...prev, item];
-      });
-    },
-    []
-  );
+  // Wire TTS player callbacks (stable — only depends on dispatch)
+  const tts = ttsRef.current;
+  tts.onPlayStart = () => dispatch({ type: "TTS_STARTED" });
+  tts.onPlayStop = () => dispatch({ type: "TTS_STOPPED" });
 
   const getSessionToken = useCallback(async () => {
     if (sessionTokenRef.current) return sessionTokenRef.current;
@@ -98,6 +83,18 @@ export function useVoiceSession() {
     }
   }, []);
 
+  const handleVadRms = useCallback(
+    (rms: number) => {
+      if (rms < 0.02) return;
+      if (!canBargeIn(stateRef.current)) return;
+      dispatch({ type: "BARGE_IN" });
+      console.log(`VAD barge-in triggered (RMS=${rms.toFixed(3)})`);
+      ttsRef.current.stop();
+      sendInterrupt();
+    },
+    [sendInterrupt],
+  );
+
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       // Binary = TTS audio
@@ -110,13 +107,24 @@ export function useVoiceSession() {
         const data = JSON.parse(event.data);
 
         if (data.type === MSG_STATE) {
-          agentStateRef.current = data.state;
-          setAgentState(data.state);
+          dispatch({ type: "SERVER_STATE", state: data.state });
           return;
         }
 
         if (data.type === MSG_AGENT_RESPONSE) {
-          addTranscript(data.text, true, true);
+          const item: TranscriptItem = {
+            id: nextId++,
+            text: data.text,
+            isFinal: true,
+            isAgent: true,
+            timestamp: "AI - " + new Date().toLocaleTimeString(),
+          };
+          dispatch({ type: "ADD_TRANSCRIPT", item });
+          return;
+        }
+
+        if (data.type === MSG_AGENT_RESPONSE_INTERRUPTED) {
+          dispatch({ type: "UPDATE_LAST_AGENT_TRANSCRIPT", text: data.text });
           return;
         }
 
@@ -125,10 +133,7 @@ export function useVoiceSession() {
         }
 
         // Deepgram transcript
-        setStats((prev) => {
-          const updated = { ...prev, messages: prev.messages + 1 };
-          return updated;
-        });
+        dispatch({ type: "COUNT_MESSAGE" });
 
         if (data.type === "Results" || data.channel) {
           const transcript =
@@ -136,19 +141,24 @@ export function useVoiceSession() {
           const isFinal = data.is_final || false;
 
           if (transcript) {
-            addTranscript(transcript, isFinal, false);
-            if (isFinal) {
-              setStats((prev) => ({ ...prev, finals: prev.finals + 1 }));
-            }
+            const item: TranscriptItem = {
+              id: nextId++,
+              text: transcript,
+              isFinal,
+              isAgent: false,
+              timestamp: new Date().toLocaleTimeString(),
+            };
+            dispatch({ type: "ADD_TRANSCRIPT", item });
 
-            // Barge-in
-            if (
-              isFinal &&
-              transcript &&
-              agentStateRef.current === "SPEAKING"
-            ) {
-              ttsRef.current.stop();
-              sendInterrupt();
+            if (isFinal) {
+              dispatch({ type: "COUNT_FINAL" });
+
+              // Transcript-based barge-in
+              if (canBargeIn(stateRef.current)) {
+                dispatch({ type: "BARGE_IN" });
+                ttsRef.current.stop();
+                sendInterrupt();
+              }
             }
           }
         }
@@ -156,12 +166,12 @@ export function useVoiceSession() {
         console.error("Error parsing message:", error);
       }
     },
-    [addTranscript, sendInterrupt]
+    [sendInterrupt],
   );
 
   const connect = useCallback(
     async (config: SessionConfig) => {
-      setConnectionState("connecting");
+      dispatch({ type: "CONNECT_START" });
       startTimeRef.current = Date.now();
       try {
         const token = await getSessionToken();
@@ -198,37 +208,32 @@ export function useVoiceSession() {
           ws.onmessage = handleMessage;
           ws.onclose = (event) => {
             wsRef.current = null;
-            agentStateRef.current = "LISTENING";
-            setAgentState("LISTENING");
-            setStats({ messages: 0, finals: 0 });
+            dispatch({ type: "SERVER_STATE", state: "LISTENING" });
             if (event.code === 4401) {
               sessionTokenRef.current = null;
             }
-            // Auto-reset after close
             setTimeout(() => {
-              setConnectionState("disconnected");
-              setMicActive(false);
+              dispatch({ type: "DISCONNECT" });
             }, 2000);
           };
         });
 
-        setActiveConfig(config);
+        dispatch({ type: "CONNECT_SUCCESS", config });
         await initAudioContext();
         await startMicrophone((buffer: ArrayBuffer) => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(buffer);
           }
-        });
+        }, handleVadRms);
 
-        setConnectionState("connected");
-        setMicActive(true);
+        dispatch({ type: "MIC_ACTIVE", active: true });
       } catch (error) {
         console.error("Connection error:", error);
-        setConnectionState("disconnected");
+        dispatch({ type: "DISCONNECT" });
         throw error;
       }
     },
-    [getSessionToken, handleMessage]
+    [getSessionToken, handleMessage, handleVadRms],
   );
 
   const disconnect = useCallback(() => {
@@ -238,25 +243,20 @@ export function useVoiceSession() {
     }
     ttsRef.current.stop();
     stopMicrophone();
-    agentStateRef.current = "LISTENING";
-    setAgentState("LISTENING");
-    setConnectionState("disconnected");
-    setMicActive(false);
-    setStats({ messages: 0, finals: 0 });
+    dispatch({ type: "DISCONNECT" });
   }, []);
 
   const endSession = useCallback(async (): Promise<SessionSummary | null> => {
-    if (!activeConfig) return null;
+    const currentState = stateRef.current;
+    if (!currentState.activeConfig) return null;
 
-    // Build history from transcripts
-    const history = transcripts
+    const history = currentState.transcripts
       .filter((t) => t.isFinal)
       .map((t) => ({
         role: t.isAgent ? "assistant" : "user",
         content: t.text,
       }));
 
-    // Disconnect first
     disconnect();
 
     if (history.length === 0) return null;
@@ -265,10 +265,10 @@ export function useVoiceSession() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        candidate: activeConfig.candidate,
-        interviewer: activeConfig.interviewer,
-        position: activeConfig.position || undefined,
-        mode: activeConfig.mode,
+        candidate: currentState.activeConfig.candidate,
+        interviewer: currentState.activeConfig.interviewer,
+        position: currentState.activeConfig.position || undefined,
+        mode: currentState.activeConfig.mode,
         startTime: startTimeRef.current,
         history,
       }),
@@ -276,15 +276,15 @@ export function useVoiceSession() {
 
     if (!response.ok) throw new Error("Failed to end session");
     return response.json();
-  }, [activeConfig, transcripts, disconnect]);
+  }, [disconnect]);
 
   return {
-    connectionState,
-    agentState,
-    micActive,
-    transcripts,
-    stats,
-    activeConfig,
+    connectionState: state.connectionState,
+    agentState: state.agentState,
+    micActive: state.micActive,
+    transcripts: state.transcripts,
+    stats: state.stats,
+    activeConfig: state.activeConfig,
     connect,
     disconnect,
     endSession,

@@ -18,7 +18,7 @@ export async function initAudioContext() {
   return audioContext;
 }
 
-export async function startMicrophone(onAudioChunk) {
+export async function startMicrophone(onAudioChunk, onRms) {
   if (mediaStream) return;
 
   mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -44,6 +44,13 @@ export async function startMicrophone(onAudioChunk) {
       pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
     }
     onAudioChunk(pcm16.buffer);
+    if (onRms) {
+      let sum = 0;
+      for (let i = 0; i < inputData.length; i++) {
+        sum += inputData[i] * inputData[i];
+      }
+      onRms(Math.sqrt(sum / inputData.length));
+    }
     chunkCount++;
     if (chunkCount === 1) {
       console.log(`First audio chunk sent (${pcm16.buffer.byteLength} bytes)`);

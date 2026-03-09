@@ -21,7 +21,7 @@ export function createDeepgramSTT(
     interim_results: "true",
     punctuate: "true",
     smart_format: "true",
-    utterance_end_ms: "1000",
+    utterance_end_ms: "1500",
     endpointing: "500",
   });
 

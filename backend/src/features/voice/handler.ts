@@ -224,13 +224,29 @@ async function processUserTurn(
     // TTS
     sm.transition("SPEAKING");
     const voice = ws.data.queryParams.get("tts_voice") || "thalia";
-    await streamTTS(
+    const ttsResult = await streamTTS(
       responseText,
       ws,
       apiKey,
       abortController.signal,
       voice,
     );
+
+    if (ttsResult.aborted) {
+      // Estimate how much the user heard
+      const secondsDelivered = ttsResult.bytesSent / (24000 * 2);
+      // Rough estimate: ~15 chars per second of speech
+      const charsDelivered = Math.floor(secondsDelivered * 15);
+      const truncatedText = truncateAtSentence(responseText, charsDelivered);
+      const markedText = truncatedText + " [interrupted]";
+
+      ws.data.history.replaceLastAssistant(markedText);
+      console.log(`Interrupt: delivered ~${secondsDelivered.toFixed(1)}s (~${charsDelivered} chars), truncated to: "${markedText.slice(0, 80)}..."`);
+
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: "agent_response_interrupted", text: markedText }));
+      }
+    }
   } catch (err: any) {
     if (err.name === "AbortError" || abortController.signal.aborted) {
       console.log("Turn aborted (interrupt)");
@@ -290,6 +306,31 @@ function handleInterrupt(ws: ServerWebSocket<WsData>) {
     }
     sm.transition("LISTENING");
   }
+}
+
+/** Truncate text to approximately `maxChars` at a sentence boundary. */
+function truncateAtSentence(text: string, maxChars: number): string {
+  if (maxChars >= text.length) return text;
+  if (maxChars <= 0) return "";
+
+  // Look for sentence-ending punctuation near maxChars
+  const searchRegion = text.slice(0, Math.min(maxChars + 40, text.length));
+  const sentenceEnd = /[.!?]\s/g;
+  let lastEnd = -1;
+  let match;
+  while ((match = sentenceEnd.exec(searchRegion)) !== null) {
+    if (match.index <= maxChars + 20) {
+      lastEnd = match.index + 1; // include the punctuation
+    }
+  }
+
+  if (lastEnd > maxChars * 0.5) {
+    return text.slice(0, lastEnd).trim();
+  }
+
+  // No good sentence boundary — just cut at a word boundary
+  const cut = text.lastIndexOf(" ", maxChars);
+  return (cut > 0 ? text.slice(0, cut) : text.slice(0, maxChars)).trim();
 }
 
 export function handleClose(ws: ServerWebSocket<WsData>) {

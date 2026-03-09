@@ -18,6 +18,16 @@ export class ConversationHistory {
     return [...this.messages];
   }
 
+  replaceLastAssistant(text: string) {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const msg = this.messages[i]!;
+      if (msg.role === "assistant") {
+        msg.content = text;
+        return;
+      }
+    }
+  }
+
   clear() {
     this.messages = [];
   }
