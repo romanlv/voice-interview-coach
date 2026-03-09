@@ -1,6 +1,7 @@
 export class TTSPlayer {
   constructor() {
     this.playbackCtx = null;
+    this.analyser = null;
     this.nextPlayTime = 0;
     this.sources = [];
     this.remainder = null;
@@ -30,7 +31,16 @@ export class TTSPlayer {
     if (this.playbackCtx.state === 'suspended') {
       this.playbackCtx.resume();
     }
+    if (!this.analyser) {
+      this.analyser = this.playbackCtx.createAnalyser();
+      this.analyser.fftSize = 256;
+      this.analyser.connect(this.playbackCtx.destination);
+    }
     return this.playbackCtx;
+  }
+
+  getAnalyser() {
+    return this.analyser;
   }
 
   playChunk(arrayBuffer) {
@@ -74,7 +84,7 @@ export class TTSPlayer {
 
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(ctx.destination);
+    source.connect(this.analyser || ctx.destination);
 
     const now = ctx.currentTime;
     const startTime = Math.max(now, this.nextPlayTime);

@@ -1,9 +1,10 @@
-import { useReducer, useRef, useCallback } from "react";
+import { useReducer, useRef, useCallback, useState } from "react";
 import { TTSPlayer } from "../features/audio/tts-player.js";
 import {
   initAudioContext,
   startMicrophone,
   stopMicrophone,
+  getMicAnalyser,
 } from "../features/audio/mic-capture.js";
 import {
   EVT_SETTINGS_APPLIED,
@@ -57,6 +58,9 @@ export function useVoiceSession() {
   const [state, dispatch] = useReducer(voiceSessionReducer, initialState);
   const stateRef = useRef<VoiceSessionState>(initialState);
   stateRef.current = state;
+
+  const [agentAnalyser, setAgentAnalyser] = useState<AnalyserNode | null>(null);
+  const [userAnalyser, setUserAnalyser] = useState<AnalyserNode | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const ttsRef = useRef<TTSPlayer>(new TTSPlayer());
@@ -264,6 +268,9 @@ export function useVoiceSession() {
         });
 
         dispatch({ type: "MIC_ACTIVE", active: true });
+
+        setAgentAnalyser(ttsRef.current.getAnalyser());
+        setUserAnalyser(getMicAnalyser());
       } catch (error) {
         console.error("Connection error:", error);
         dispatch({ type: "DISCONNECT" });
@@ -285,6 +292,8 @@ export function useVoiceSession() {
     }
     ttsRef.current.stop();
     stopMicrophone();
+    setAgentAnalyser(null);
+    setUserAnalyser(null);
     dispatch({ type: "DISCONNECT" });
   }, [clearSilenceTimer]);
 
@@ -321,6 +330,8 @@ export function useVoiceSession() {
     micActive: state.micActive,
     transcripts: state.transcripts,
     activeConfig: state.activeConfig,
+    agentAnalyser,
+    userAnalyser,
     connect,
     disconnect,
     endSession,
