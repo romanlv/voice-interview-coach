@@ -148,11 +148,23 @@ export function useVoiceSession() {
             clearSilenceTimer();
             break;
 
-          case EVT_AGENT_AUDIO_DONE:
-            // Don't reset silence timer here — audio may still be playing locally.
-            // The TTSPlayer.onPlayStop callback handles the transition to listening
-            // and resets the silence timer when playback truly finishes.
+          case EVT_AGENT_AUDIO_DONE: {
+            // Deepgram finished sending audio, but local TTS playback may still
+            // be buffered. Delay the silence timer by the remaining playback time.
+            const remainMs = ttsRef.current.remainingTime() * 1000;
+            if (remainMs <= 0) {
+              dispatch({ type: "AGENT_LISTENING" });
+              resetSilenceTimer();
+            } else {
+              // Wait for playback to finish, then start silence timer
+              clearSilenceTimer();
+              silenceTimerRef.current = setTimeout(() => {
+                dispatch({ type: "AGENT_LISTENING" });
+                resetSilenceTimer();
+              }, remainMs);
+            }
             break;
+          }
 
           case EVT_INJECTION_REFUSED:
             resetSilenceTimer();
@@ -198,15 +210,6 @@ export function useVoiceSession() {
         // 3. Init TTS player and audio context
         await ttsRef.current.init();
         await initAudioContext();
-
-        // Wire TTS playback callbacks for accurate silence detection.
-        // AgentAudioDone fires when Deepgram finishes sending audio, but local
-        // playback may continue for many seconds. We use these callbacks to
-        // track when the user can actually hear the agent stop speaking.
-        ttsRef.current.onPlayStop = () => {
-          dispatch({ type: "AGENT_LISTENING" });
-          resetSilenceTimer();
-        };
 
         // 4. Connect to Deepgram Voice Agent
         const ws = new WebSocket(
@@ -287,7 +290,7 @@ export function useVoiceSession() {
         throw error;
       }
     },
-    [handleMessage, clearSilenceTimer, resetSilenceTimer],
+    [handleMessage, clearSilenceTimer],
   );
 
   const disconnect = useCallback(() => {

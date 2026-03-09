@@ -108,6 +108,12 @@ export class TTSPlayer {
     };
   }
 
+  /** Seconds of audio remaining in the playback buffer */
+  remainingTime() {
+    if (!this.playbackCtx) return 0;
+    return Math.max(0, this.nextPlayTime - this.playbackCtx.currentTime);
+  }
+
   stop() {
     console.warn(`[TTS] stop() called — ${this.sources.length} active sources, ${this._chunkCount} chunks received so far`);
     console.trace('[TTS] stop() stacktrace');
