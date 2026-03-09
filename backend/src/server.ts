@@ -95,15 +95,10 @@ const server = Bun.serve({
         }
       },
     },
-  },
-
-  fetch(req) {
-    const url = new URL(req.url);
-
-    // GET /api/prompt?candidate=X&interviewer=Y&position=Z&mode=M
-    if (url.pathname === "/api/prompt" && req.method === "GET") {
-      return (async () => {
+    "/api/prompt": {
+      GET: async (req) => {
         try {
+          const url = new URL(req.url);
           const candidateSlug = url.searchParams.get("candidate") || "";
           const interviewerSlug = url.searchParams.get("interviewer") || "";
           const positionSlug = url.searchParams.get("position") || "";
@@ -136,10 +131,8 @@ const server = Bun.serve({
             { status: 500 },
           );
         }
-      })();
-    }
-
-    return new Response("Not Found", { status: 404 });
+      },
+    },
   },
 });
 

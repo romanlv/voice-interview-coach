@@ -12,6 +12,7 @@ import {
   EVT_AGENT_STARTED_SPEAKING,
   EVT_AGENT_AUDIO_DONE,
   EVT_END_OF_THOUGHT,
+  EVT_INJECTION_REFUSED,
 } from "../features/connection/protocol.js";
 import {
   voiceSessionReducer,
@@ -49,6 +50,8 @@ export type AgentState = "LISTENING" | "THINKING" | "SPEAKING";
 let nextId = 0;
 
 const KEEPALIVE_INTERVAL_MS = 10_000;
+const SILENCE_TIMEOUT_MS = 15_000;
+const MAX_NUDGES_BEFORE_WRAP_UP = 3;
 
 export function useVoiceSession() {
   const [state, dispatch] = useReducer(voiceSessionReducer, initialState);
@@ -59,6 +62,33 @@ export function useVoiceSession() {
   const ttsRef = useRef<TTSPlayer>(new TTSPlayer());
   const startTimeRef = useRef<number>(0);
   const keepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nudgeCountRef = useRef<number>(0);
+
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }, []);
+
+  const resetSilenceTimer = useCallback(() => {
+    clearSilenceTimer();
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    silenceTimerRef.current = setTimeout(() => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+      const content =
+        nudgeCountRef.current >= MAX_NUDGES_BEFORE_WRAP_UP
+          ? "It seems like you might need a moment. Would you like to continue, or shall we wrap up for today?"
+          : "Take your time. Would you like me to rephrase the question?";
+
+      wsRef.current.send(JSON.stringify({ type: "InjectAgentMessage", content }));
+      nudgeCountRef.current++;
+    }, SILENCE_TIMEOUT_MS);
+  }, [clearSilenceTimer]);
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
@@ -74,6 +104,13 @@ export function useVoiceSession() {
         switch (data.type) {
           case EVT_SETTINGS_APPLIED:
             dispatch({ type: "SETTINGS_APPLIED" });
+            // Trigger initial greeting via InjectAgentMessage (bypasses LLM, goes straight to TTS)
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({
+                type: "InjectAgentMessage",
+                content: "Hello! Thanks for joining. To get started, could you tell me a little about yourself?",
+              }));
+            }
             break;
 
           case EVT_CONVERSATION_TEXT: {
@@ -98,14 +135,22 @@ export function useVoiceSession() {
           case EVT_USER_STARTED_SPEAKING:
             dispatch({ type: "AGENT_LISTENING" });
             ttsRef.current.stop();
+            nudgeCountRef.current = 0;
+            resetSilenceTimer();
             break;
 
           case EVT_AGENT_STARTED_SPEAKING:
             dispatch({ type: "AGENT_SPEAKING" });
+            clearSilenceTimer();
             break;
 
           case EVT_AGENT_AUDIO_DONE:
             dispatch({ type: "AGENT_LISTENING" });
+            resetSilenceTimer();
+            break;
+
+          case EVT_INJECTION_REFUSED:
+            resetSilenceTimer();
             break;
 
           case EVT_END_OF_THOUGHT:
@@ -116,13 +161,15 @@ export function useVoiceSession() {
         console.error("Error parsing message:", error);
       }
     },
-    [],
+    [resetSilenceTimer, clearSilenceTimer],
   );
 
   const connect = useCallback(
     async (config: SessionConfig) => {
       dispatch({ type: "CONNECT_START" });
       startTimeRef.current = Date.now();
+      clearSilenceTimer();
+      nudgeCountRef.current = 0;
 
       try {
         // 1. Fetch system prompt
@@ -174,7 +221,7 @@ export function useVoiceSession() {
                     provider: { type: "deepgram", model: "nova-3" },
                   },
                   think: {
-                    provider: { type: "open_ai", model: "gpt-4o-mini" },
+                    provider: { type: "anthropic", model: "claude-sonnet-4-6" },
                     prompt,
                   },
                   speak: {
@@ -183,8 +230,6 @@ export function useVoiceSession() {
                       model: `aura-2-${config.ttsVoice || "thalia"}-en`,
                     },
                   },
-                  greeting:
-                    "Start by greeting the candidate and asking your first question.",
                 },
               }),
             );
@@ -225,10 +270,11 @@ export function useVoiceSession() {
         throw error;
       }
     },
-    [handleMessage],
+    [handleMessage, clearSilenceTimer],
   );
 
   const disconnect = useCallback(() => {
+    clearSilenceTimer();
     if (keepAliveRef.current) {
       clearInterval(keepAliveRef.current);
       keepAliveRef.current = null;
@@ -240,7 +286,7 @@ export function useVoiceSession() {
     ttsRef.current.stop();
     stopMicrophone();
     dispatch({ type: "DISCONNECT" });
-  }, []);
+  }, [clearSilenceTimer]);
 
   const endSession = useCallback(async (): Promise<SessionSummary | null> => {
     const currentState = stateRef.current;
