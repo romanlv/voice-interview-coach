@@ -6,16 +6,16 @@ import {
   stopMicrophone,
 } from "../features/audio/mic-capture.js";
 import {
-  MSG_STATE,
-  MSG_AGENT_RESPONSE,
-  MSG_AGENT_RESPONSE_INTERRUPTED,
-  MSG_TTS_END,
-  MSG_INTERRUPT,
+  EVT_SETTINGS_APPLIED,
+  EVT_CONVERSATION_TEXT,
+  EVT_USER_STARTED_SPEAKING,
+  EVT_AGENT_STARTED_SPEAKING,
+  EVT_AGENT_AUDIO_DONE,
+  EVT_END_OF_THOUGHT,
 } from "../features/connection/protocol.js";
 import {
   voiceSessionReducer,
   initialState,
-  canBargeIn,
   type VoiceSessionState,
 } from "./voiceSessionReducer";
 
@@ -28,8 +28,6 @@ export interface TranscriptItem {
 }
 
 export interface SessionConfig {
-  model: string;
-  language: string;
   ttsVoice: string;
   candidate: string;
   interviewer: string;
@@ -50,54 +48,21 @@ export type AgentState = "LISTENING" | "THINKING" | "SPEAKING";
 
 let nextId = 0;
 
+const KEEPALIVE_INTERVAL_MS = 10_000;
+
 export function useVoiceSession() {
   const [state, dispatch] = useReducer(voiceSessionReducer, initialState);
   const stateRef = useRef<VoiceSessionState>(initialState);
-
-  // Keep stateRef in sync — assigned after every render
   stateRef.current = state;
 
   const wsRef = useRef<WebSocket | null>(null);
   const ttsRef = useRef<TTSPlayer>(new TTSPlayer());
-  const sessionTokenRef = useRef<string | null>(null);
   const startTimeRef = useRef<number>(0);
-
-  // Wire TTS player callbacks (stable — only depends on dispatch)
-  const tts = ttsRef.current;
-  tts.onPlayStart = () => dispatch({ type: "TTS_STARTED" });
-  tts.onPlayStop = () => dispatch({ type: "TTS_STOPPED" });
-
-  const getSessionToken = useCallback(async () => {
-    if (sessionTokenRef.current) return sessionTokenRef.current;
-    const response = await fetch("api/session");
-    if (!response.ok) throw new Error(`Session failed: ${response.status}`);
-    const data = await response.json();
-    sessionTokenRef.current = data.token;
-    return data.token;
-  }, []);
-
-  const sendInterrupt = useCallback(() => {
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: MSG_INTERRUPT }));
-    }
-  }, []);
-
-  const handleVadRms = useCallback(
-    (rms: number) => {
-      if (rms < 0.02) return;
-      if (!canBargeIn(stateRef.current)) return;
-      dispatch({ type: "BARGE_IN" });
-      console.log(`VAD barge-in triggered (RMS=${rms.toFixed(3)})`);
-      ttsRef.current.stop();
-      sendInterrupt();
-    },
-    [sendInterrupt],
-  );
+  const keepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
-      // Binary = TTS audio
+      // Binary = TTS audio from Deepgram agent
       if (event.data instanceof ArrayBuffer) {
         ttsRef.current.playChunk(event.data);
         return;
@@ -106,125 +71,152 @@ export function useVoiceSession() {
       try {
         const data = JSON.parse(event.data);
 
-        if (data.type === MSG_STATE) {
-          dispatch({ type: "SERVER_STATE", state: data.state });
-          return;
-        }
+        switch (data.type) {
+          case EVT_SETTINGS_APPLIED:
+            dispatch({ type: "SETTINGS_APPLIED" });
+            break;
 
-        if (data.type === MSG_AGENT_RESPONSE) {
-          const item: TranscriptItem = {
-            id: nextId++,
-            text: data.text,
-            isFinal: true,
-            isAgent: true,
-            timestamp: "AI - " + new Date().toLocaleTimeString(),
-          };
-          dispatch({ type: "ADD_TRANSCRIPT", item });
-          return;
-        }
-
-        if (data.type === MSG_AGENT_RESPONSE_INTERRUPTED) {
-          dispatch({ type: "UPDATE_LAST_AGENT_TRANSCRIPT", text: data.text });
-          return;
-        }
-
-        if (data.type === MSG_TTS_END) {
-          return;
-        }
-
-        // Deepgram transcript
-        dispatch({ type: "COUNT_MESSAGE" });
-
-        if (data.type === "Results" || data.channel) {
-          const transcript =
-            data.channel?.alternatives?.[0]?.transcript || "";
-          const isFinal = data.is_final || false;
-
-          if (transcript) {
+          case EVT_CONVERSATION_TEXT: {
+            const isAgent = data.role === "assistant";
             const item: TranscriptItem = {
               id: nextId++,
-              text: transcript,
-              isFinal,
-              isAgent: false,
-              timestamp: new Date().toLocaleTimeString(),
+              text: data.content,
+              isFinal: true,
+              isAgent,
+              timestamp:
+                (isAgent ? "AI - " : "") + new Date().toLocaleTimeString(),
             };
-            dispatch({ type: "ADD_TRANSCRIPT", item });
-
-            if (isFinal) {
-              dispatch({ type: "COUNT_FINAL" });
-
-              // Transcript-based barge-in
-              if (canBargeIn(stateRef.current)) {
-                dispatch({ type: "BARGE_IN" });
-                ttsRef.current.stop();
-                sendInterrupt();
-              }
-            }
+            dispatch({
+              type: "ADD_CONVERSATION_TEXT",
+              item,
+              role: data.role,
+              content: data.content,
+            });
+            break;
           }
+
+          case EVT_USER_STARTED_SPEAKING:
+            dispatch({ type: "AGENT_LISTENING" });
+            ttsRef.current.stop();
+            break;
+
+          case EVT_AGENT_STARTED_SPEAKING:
+            dispatch({ type: "AGENT_SPEAKING" });
+            break;
+
+          case EVT_AGENT_AUDIO_DONE:
+            dispatch({ type: "AGENT_LISTENING" });
+            break;
+
+          case EVT_END_OF_THOUGHT:
+            // Agent finished thinking, will start speaking soon
+            break;
         }
       } catch (error) {
         console.error("Error parsing message:", error);
       }
     },
-    [sendInterrupt],
+    [],
   );
 
   const connect = useCallback(
     async (config: SessionConfig) => {
       dispatch({ type: "CONNECT_START" });
       startTimeRef.current = Date.now();
-      try {
-        const token = await getSessionToken();
 
-        const params = new URLSearchParams({
-          model: config.model,
-          language: config.language,
-          encoding: "linear16",
-          sample_rate: "16000",
-          channels: "1",
-          tts_voice: config.ttsVoice || "thalia",
+      try {
+        // 1. Fetch system prompt
+        const promptParams = new URLSearchParams({
           candidate: config.candidate,
           interviewer: config.interviewer,
           mode: config.mode,
         });
         if (config.position) {
-          params.set("position", config.position);
+          promptParams.set("position", config.position);
         }
-        const wsUrl = new URL(`api/voice?${params}`, document.baseURI);
-        wsUrl.protocol =
-          wsUrl.protocol === "https:" ? "wss:" : "ws:";
+        const promptRes = await fetch(`api/prompt?${promptParams}`);
+        if (!promptRes.ok) throw new Error(`Prompt fetch failed: ${promptRes.status}`);
+        const { prompt } = await promptRes.json();
 
+        // 2. Fetch Deepgram token
+        const tokenRes = await fetch("api/deepgram-token");
+        if (!tokenRes.ok) throw new Error(`Token fetch failed: ${tokenRes.status}`);
+        const { access_token } = await tokenRes.json();
+
+        // 3. Init TTS player and audio context
         await ttsRef.current.init();
+        await initAudioContext();
 
-        const ws = new WebSocket(wsUrl.href, [
-          `access_token.${token}`,
-        ]);
+        // 4. Connect to Deepgram Voice Agent
+        const ws = new WebSocket(
+          "wss://agent.deepgram.com/v1/agent/converse",
+          ["bearer", access_token],
+        );
         ws.binaryType = "arraybuffer";
         wsRef.current = ws;
 
         await new Promise<void>((resolve, reject) => {
-          ws.onopen = () => resolve();
+          ws.onopen = () => {
+            // Send Settings message
+            ws.send(
+              JSON.stringify({
+                type: "Settings",
+                audio: {
+                  input: { encoding: "linear16", sample_rate: 16000 },
+                  output: {
+                    encoding: "linear16",
+                    sample_rate: 24000,
+                    container: "none",
+                  },
+                },
+                agent: {
+                  listen: {
+                    provider: { type: "deepgram", model: "nova-3" },
+                  },
+                  think: {
+                    provider: { type: "open_ai", model: "gpt-4o-mini" },
+                    prompt,
+                  },
+                  speak: {
+                    provider: {
+                      type: "deepgram",
+                      model: `aura-2-${config.ttsVoice || "thalia"}-en`,
+                    },
+                  },
+                  greeting:
+                    "Start by greeting the candidate and asking your first question.",
+                },
+              }),
+            );
+            resolve();
+          };
           ws.onerror = (e) => reject(e);
           ws.onmessage = handleMessage;
-          ws.onclose = (event) => {
+          ws.onclose = () => {
             wsRef.current = null;
-            dispatch({ type: "SERVER_STATE", state: "LISTENING" });
-            if (event.code === 4401) {
-              sessionTokenRef.current = null;
+            if (keepAliveRef.current) {
+              clearInterval(keepAliveRef.current);
+              keepAliveRef.current = null;
             }
-            setTimeout(() => {
-              dispatch({ type: "DISCONNECT" });
-            }, 2000);
+            dispatch({ type: "DISCONNECT" });
           };
         });
 
+        // 5. Start KeepAlive interval
+        keepAliveRef.current = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "KeepAlive" }));
+          }
+        }, KEEPALIVE_INTERVAL_MS);
+
         dispatch({ type: "CONNECT_SUCCESS", config });
-        await initAudioContext();
+
+        // 6. Start microphone — stream audio to Deepgram
         await startMicrophone((buffer: ArrayBuffer) => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(buffer);
           }
-        }, handleVadRms);
+        });
 
         dispatch({ type: "MIC_ACTIVE", active: true });
       } catch (error) {
@@ -233,10 +225,14 @@ export function useVoiceSession() {
         throw error;
       }
     },
-    [getSessionToken, handleMessage, handleVadRms],
+    [handleMessage],
   );
 
   const disconnect = useCallback(() => {
+    if (keepAliveRef.current) {
+      clearInterval(keepAliveRef.current);
+      keepAliveRef.current = null;
+    }
     if (wsRef.current) {
       wsRef.current.close(1000, "User disconnected");
       wsRef.current = null;
@@ -250,12 +246,7 @@ export function useVoiceSession() {
     const currentState = stateRef.current;
     if (!currentState.activeConfig) return null;
 
-    const history = currentState.transcripts
-      .filter((t) => t.isFinal)
-      .map((t) => ({
-        role: t.isAgent ? "assistant" : "user",
-        content: t.text,
-      }));
+    const history = currentState.conversationHistory;
 
     disconnect();
 
@@ -283,7 +274,6 @@ export function useVoiceSession() {
     agentState: state.agentState,
     micActive: state.micActive,
     transcripts: state.transcripts,
-    stats: state.stats,
     activeConfig: state.activeConfig,
     connect,
     disconnect,

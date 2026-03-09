@@ -1,18 +1,11 @@
-import { verifySync } from "./features/auth/jwt.ts";
-import { handleSession } from "./features/auth/session.ts";
-import {
-  type WsData,
-  createWsData,
-  handleOpen,
-  handleMessage,
-  handleClose,
-} from "./features/voice/handler.ts";
-import { listCandidates } from "./features/storage/candidates.ts";
-import { listInterviewers } from "./features/storage/interviewers.ts";
-import { listPositions } from "./features/storage/positions.ts";
+import { DeepgramClient } from "@deepgram/sdk";
+import { listCandidates, loadResume } from "./features/storage/candidates.ts";
+import { listInterviewers, loadInterviewer } from "./features/storage/interviewers.ts";
+import { listPositions, loadPosition } from "./features/storage/positions.ts";
 import { saveSession } from "./features/storage/session-writer.ts";
 import { loadNotes, generateAndMergeNotes } from "./features/storage/notes.ts";
 import { generateSessionSummary } from "./features/llm/client.ts";
+import { buildSystemPrompt } from "./features/llm/prompts.ts";
 
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY;
 if (!DEEPGRAM_API_KEY) {
@@ -25,7 +18,8 @@ if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
   process.exit(1);
 }
 
-const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomUUID();
+const deepgram = new DeepgramClient({ apiKey: DEEPGRAM_API_KEY });
+
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT) || 8081;
 
@@ -34,16 +28,19 @@ const server = Bun.serve({
   port: PORT,
 
   routes: {
-    "/api/session": {
-      GET: () => handleSession(SESSION_SECRET)(),
-    },
-
-    "/api/metadata": {
-      GET: () =>
-        Response.json({
-          title: "AI Interview Coach",
-          description: "Voice-based AI interview practice",
-        }),
+    "/api/deepgram-token": {
+      GET: async () => {
+        try {
+          const tokenData = await deepgram.auth.v1.tokens.grant();
+          return Response.json({ access_token: tokenData.access_token });
+        } catch (err) {
+          console.error("Token generation error:", err);
+          return Response.json(
+            { error: "Failed to generate token" },
+            { status: 500 },
+          );
+        }
+      },
     },
 
     "/api/candidates": {
@@ -100,50 +97,49 @@ const server = Bun.serve({
     },
   },
 
-  // WebSocket upgrade must go through fetch fallback
-  fetch(req, server) {
+  fetch(req) {
     const url = new URL(req.url);
 
-    if (url.pathname === "/api/voice") {
-      const protocols = req.headers.get("sec-websocket-protocol") || "";
-      const tokenProtocol = protocols
-        .split(",")
-        .map((p) => p.trim())
-        .find((p) => p.startsWith("access_token."));
+    // GET /api/prompt?candidate=X&interviewer=Y&position=Z&mode=M
+    if (url.pathname === "/api/prompt" && req.method === "GET") {
+      return (async () => {
+        try {
+          const candidateSlug = url.searchParams.get("candidate") || "";
+          const interviewerSlug = url.searchParams.get("interviewer") || "";
+          const positionSlug = url.searchParams.get("position") || "";
+          const mode = (url.searchParams.get("mode") || "interview") as
+            | "practice"
+            | "interview";
 
-      if (!tokenProtocol) {
-        return new Response("Missing auth token", { status: 401 });
-      }
+          const interviewerContent = interviewerSlug
+            ? await loadInterviewer(interviewerSlug)
+            : "";
+          const resumeContent = candidateSlug
+            ? await loadResume(candidateSlug)
+            : "";
+          const positionContent = positionSlug
+            ? await loadPosition(positionSlug)
+            : undefined;
 
-      const token = tokenProtocol.replace("access_token.", "");
-      if (!verifySync(token, SESSION_SECRET)) {
-        return new Response("Invalid token", { status: 401 });
-      }
+          const prompt = buildSystemPrompt({
+            interviewer: interviewerContent,
+            resume: resumeContent,
+            position: positionContent,
+            mode,
+          });
 
-      const upgraded = server.upgrade(req, {
-        data: createWsData(url.searchParams),
-      });
-
-      if (!upgraded) {
-        return new Response("WebSocket upgrade failed", { status: 500 });
-      }
-      return undefined;
+          return Response.json({ prompt });
+        } catch (err) {
+          console.error("Prompt generation error:", err);
+          return Response.json(
+            { error: "Failed to generate prompt" },
+            { status: 500 },
+          );
+        }
+      })();
     }
 
     return new Response("Not Found", { status: 404 });
-  },
-
-  websocket: {
-    data: {} as WsData,
-    open(ws) {
-      handleOpen(ws, DEEPGRAM_API_KEY!);
-    },
-    message(ws, message) {
-      handleMessage(ws, message);
-    },
-    close(ws) {
-      handleClose(ws);
-    },
   },
 });
 

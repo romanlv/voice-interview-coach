@@ -1,5 +1,7 @@
-export const MSG_STATE = 'state';
-export const MSG_AGENT_RESPONSE = 'agent_response';
-export const MSG_TTS_END = 'tts_end';
-export const MSG_INTERRUPT = 'interrupt';
-export const MSG_AGENT_RESPONSE_INTERRUPTED = 'agent_response_interrupted';
+// Deepgram Voice Agent event types
+export const EVT_SETTINGS_APPLIED = "SettingsApplied";
+export const EVT_CONVERSATION_TEXT = "ConversationText";
+export const EVT_USER_STARTED_SPEAKING = "UserStartedSpeaking";
+export const EVT_AGENT_STARTED_SPEAKING = "AgentStartedSpeaking";
+export const EVT_AGENT_AUDIO_DONE = "AgentAudioDone";
+export const EVT_END_OF_THOUGHT = "EndOfThought";

@@ -15,7 +15,6 @@ import {
   SelectGroup,
   SelectLabel,
 } from "./components/ui/select";
-import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
 import { Mic, Square, RotateCcw } from "lucide-react";
 
@@ -75,7 +74,6 @@ export default function App() {
     agentState,
     micActive,
     transcripts,
-    stats,
     activeConfig,
     connect,
     disconnect,
@@ -89,8 +87,6 @@ export default function App() {
   const [interviewer, setInterviewer] = useState("");
   const [position, setPosition] = useState("");
   const [mode, setMode] = useState<"interview" | "practice">("interview");
-  const [model, setModel] = useState("nova-3");
-  const [language, setLanguage] = useState("en");
   const [ttsVoice, setTtsVoice] = useState("thalia");
 
   // App state
@@ -120,8 +116,6 @@ export default function App() {
   async function handleStart() {
     try {
       await connect({
-        model,
-        language,
         ttsVoice,
         candidate,
         interviewer,
@@ -177,41 +171,6 @@ export default function App() {
           </h3>
 
           <div className="space-y-5">
-            {/* Model */}
-            <div className="space-y-2">
-              <Label className="text-[#949498]">STT Model</Label>
-              <Select
-                value={model}
-                onValueChange={setModel}
-                disabled={appState !== "setup"}
-              >
-                <SelectTrigger className="bg-[#0b0b0c] border-[#4e4e52] text-[#edede2]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-[#0b0b0c] border-[#4e4e52]">
-                  {["nova-3", "nova-2", "nova", "enhanced", "base"].map(
-                    (m) => (
-                      <SelectItem key={m} value={m} className="text-[#edede2]">
-                        {m}
-                      </SelectItem>
-                    )
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Language */}
-            <div className="space-y-2">
-              <Label className="text-[#949498]">Language</Label>
-              <Input
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                disabled={appState !== "setup"}
-                placeholder="en"
-                className="bg-[#0b0b0c] border-[#4e4e52] text-[#edede2] placeholder:text-[#949498]"
-              />
-            </div>
-
             {/* TTS Voice */}
             <div className="space-y-2">
               <Label className="text-[#949498]">AI Voice</Label>
@@ -541,11 +500,9 @@ export default function App() {
               </>
             )}
 
-            <StatusItem label="Messages">
-              {stats.messages}
+            <StatusItem label="Transcripts">
+              {transcripts.length}
             </StatusItem>
-
-            <StatusItem label="Final Transcripts">{stats.finals}</StatusItem>
           </div>
         </aside>
       </div>
