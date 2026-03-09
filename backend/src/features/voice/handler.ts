@@ -10,6 +10,9 @@ import { loadResume } from "../storage/candidates.ts";
 import { loadPosition } from "../storage/positions.ts";
 import { saveSession } from "../storage/session-writer.ts";
 
+const SILENCE_TIMEOUT_MS = 15_000;
+const LONG_PAUSE_THRESHOLD_MS = 5_000;
+
 export type WsData = {
   createdAt: number;
   deepgramWs: WebSocket | null;
@@ -26,6 +29,9 @@ export type WsData = {
   interviewer: string;
   position: string;
   mode: string;
+  silenceTimer: ReturnType<typeof setTimeout> | null;
+  lastListeningStart: number;
+  speechDetected: boolean;
 };
 
 export function createWsData(queryParams: URLSearchParams): WsData {
@@ -41,6 +47,9 @@ export function createWsData(queryParams: URLSearchParams): WsData {
     abortController: null,
     systemPrompt: "",
     promptReady: null,
+    silenceTimer: null,
+    lastListeningStart: 0,
+    speechDetected: false,
     candidate: queryParams.get("candidate") || "",
     interviewer: queryParams.get("interviewer") || "",
     position: queryParams.get("position") || "",
@@ -76,6 +85,30 @@ async function loadPromptConfig(ws: ServerWebSocket<WsData>): Promise<void> {
   }
 }
 
+function clearSilenceTimer(ws: ServerWebSocket<WsData>) {
+  if (ws.data.silenceTimer) {
+    clearTimeout(ws.data.silenceTimer);
+    ws.data.silenceTimer = null;
+  }
+}
+
+function startSilenceTimer(ws: ServerWebSocket<WsData>, apiKey: string) {
+  clearSilenceTimer(ws);
+  ws.data.lastListeningStart = Date.now();
+  ws.data.speechDetected = false;
+  ws.data.silenceTimer = setTimeout(() => {
+    ws.data.silenceTimer = null;
+    if (
+      ws.readyState === 1 &&
+      ws.data.stateMachine?.current === "LISTENING" &&
+      !ws.data.speechDetected
+    ) {
+      console.log("Silence timeout — prompting interviewer to follow up");
+      processUserTurn(ws, "[candidate is silent]", apiKey);
+    }
+  }, SILENCE_TIMEOUT_MS);
+}
+
 export function handleOpen(ws: ServerWebSocket<WsData>, apiKey: string) {
   console.log("Client connected");
 
@@ -93,21 +126,35 @@ export function handleOpen(ws: ServerWebSocket<WsData>, apiKey: string) {
       // Forward transcript to client
       ws.send(JSON.stringify(data));
 
+      // Mark that we've heard speech (for silence timer)
+      const transcript =
+        data.channel?.alternatives?.[0]?.transcript || "";
+      if (transcript && !ws.data.speechDetected) {
+        ws.data.speechDetected = true;
+        clearSilenceTimer(ws);
+      }
+
       // Accumulate final transcripts
-      if (data.is_final) {
-        const transcript =
-          data.channel?.alternatives?.[0]?.transcript || "";
-        if (transcript) {
-          ws.data.pendingTranscript +=
-            (ws.data.pendingTranscript ? " " : "") + transcript;
-        }
+      if (data.is_final && transcript) {
+        ws.data.pendingTranscript +=
+          (ws.data.pendingTranscript ? " " : "") + transcript;
       }
     },
     onUtteranceEnd: () => {
       const text = ws.data.pendingTranscript.trim();
       if (!text) return;
       ws.data.pendingTranscript = "";
-      processUserTurn(ws, text, apiKey);
+
+      // Annotate long pauses
+      const pauseMs = ws.data.lastListeningStart
+        ? Date.now() - ws.data.lastListeningStart
+        : 0;
+      const annotated =
+        pauseMs >= LONG_PAUSE_THRESHOLD_MS
+          ? `[responded after ${Math.round(pauseMs / 1000)}s] ${text}`
+          : text;
+
+      processUserTurn(ws, annotated, apiKey);
     },
     onClose: (code, reason) => {
       console.log(`Deepgram closed: ${code} ${reason}`);
@@ -193,6 +240,7 @@ async function processUserTurn(
   } finally {
     if (!abortController.signal.aborted) {
       sm.transition("LISTENING");
+      startSilenceTimer(ws, apiKey);
     }
     if (ws.data.abortController === abortController) {
       ws.data.abortController = null;
@@ -235,6 +283,7 @@ function handleInterrupt(ws: ServerWebSocket<WsData>) {
 
   if (sm.current === "SPEAKING" || sm.current === "THINKING") {
     console.log(`Aborting in-flight request (was ${sm.current})`);
+    clearSilenceTimer(ws);
     if (ws.data.abortController) {
       ws.data.abortController.abort();
       ws.data.abortController = null;
@@ -245,6 +294,7 @@ function handleInterrupt(ws: ServerWebSocket<WsData>) {
 
 export function handleClose(ws: ServerWebSocket<WsData>) {
   console.log("Client disconnected");
+  clearSilenceTimer(ws);
   if (ws.data.abortController) {
     ws.data.abortController.abort();
     ws.data.abortController = null;
