@@ -32,8 +32,22 @@ export async function saveSession(data: SessionData): Promise<string> {
     .filter(Boolean)
     .join("\n");
 
-  const transcript = data.history
-    .map((m) => `**${m.role === "user" ? "Candidate" : "Interviewer"}:** ${m.content}`)
+  // Merge consecutive messages from the same role (voice transcription sends fragments)
+  const merged: { role: string; lines: string[] }[] = [];
+  for (const m of data.history) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === m.role) {
+      last.lines.push(m.content);
+    } else {
+      merged.push({ role: m.role, lines: [m.content] });
+    }
+  }
+
+  const transcript = merged
+    .map((m) => {
+      const label = m.role === "user" ? "Candidate" : "Interviewer";
+      return `${label}:\n${m.lines.join("\n")}`;
+    })
     .join("\n\n");
 
   const content = `${frontmatter}\n\n${transcript}\n`;
