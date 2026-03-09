@@ -1,11 +1,9 @@
 import { DeepgramClient } from "@deepgram/sdk";
-import { listCandidates, loadResume } from "./features/storage/candidates.ts";
-import { listInterviewers, loadInterviewer } from "./features/storage/interviewers.ts";
-import { listPositions, loadPosition } from "./features/storage/positions.ts";
+import { listCandidates } from "./features/storage/candidates.ts";
+import { listInterviewers } from "./features/storage/interviewers.ts";
+import { listPositions } from "./features/storage/positions.ts";
 import { saveSession } from "./features/storage/session-writer.ts";
-import { loadNotes, generateAndMergeNotes } from "./features/storage/notes.ts";
-import { generateSessionSummary } from "./features/llm/client.ts";
-import { buildSystemPrompt } from "./features/llm/prompts.ts";
+import { generatePrompt, analyzeSession } from "./features/llm/agent.ts";
 
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY;
 if (!DEEPGRAM_API_KEY) {
@@ -26,6 +24,7 @@ const PORT = Number(process.env.PORT) || 8081;
 const server = Bun.serve({
   hostname: HOST,
   port: PORT,
+  idleTimeout: 120,
 
   routes: {
     "/api/deepgram-token": {
@@ -69,9 +68,7 @@ const server = Bun.serve({
           const { candidate, interviewer, position, mode, history, startTime } =
             body;
 
-          const summary = await generateSessionSummary(history);
-
-          await saveSession({
+          const sessionFile = await saveSession({
             candidate,
             interviewer,
             position,
@@ -80,10 +77,13 @@ const server = Bun.serve({
             history,
           });
 
-          const existingNotes = await loadNotes(candidate);
-          generateAndMergeNotes(candidate, history, existingNotes).catch(
-            (err) => console.error("Notes generation failed:", err),
-          );
+          const summary = await analyzeSession({
+            candidate,
+            interviewer,
+            position,
+            mode,
+            sessionFile,
+          });
 
           return Response.json(summary);
         } catch (err) {
@@ -106,22 +106,14 @@ const server = Bun.serve({
             | "practice"
             | "interview";
 
-          const interviewerContent = interviewerSlug
-            ? await loadInterviewer(interviewerSlug)
-            : "";
-          const resumeContent = candidateSlug
-            ? await loadResume(candidateSlug)
-            : "";
-          const positionContent = positionSlug
-            ? await loadPosition(positionSlug)
-            : undefined;
-
-          const prompt = buildSystemPrompt({
-            interviewer: interviewerContent,
-            resume: resumeContent,
-            position: positionContent,
+          const prompt = await generatePrompt({
+            candidate: candidateSlug,
+            interviewer: interviewerSlug,
+            position: positionSlug || undefined,
             mode,
           });
+
+          console.log({ prompt });
 
           return Response.json({ prompt });
         } catch (err) {

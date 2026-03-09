@@ -1,5 +1,6 @@
 # Thinking Agent Research
 
+
 ## Problem
 
 The current `/api/prompt` endpoint assembles a static template: it concatenates interviewer persona + resume + position + mode-specific guidelines. The voice agent receives the same generic prompt regardless of the candidate's history, strengths, or weaknesses.
