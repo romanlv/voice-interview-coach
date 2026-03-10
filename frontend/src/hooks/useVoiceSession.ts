@@ -1,4 +1,4 @@
-import { useReducer, useRef, useCallback, useState } from "react";
+import { useReducer, useRef, useCallback, useState, useEffect } from "react";
 import { TTSPlayer } from "../features/audio/tts-player";
 import {
   initAudioContext,
@@ -64,6 +64,7 @@ export function useVoiceSession() {
   const keepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nudgeCountRef = useRef<number>(0);
+  const waitingForAgentAudioDrainRef = useRef<boolean>(false);
 
   const clearSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current) {
@@ -79,6 +80,9 @@ export function useVoiceSession() {
 
     silenceTimerRef.current = setTimeout(() => {
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      if (waitingForAgentAudioDrainRef.current) return;
+      if (stateRef.current.agentState !== "LISTENING") return;
+      if (ttsRef.current.remainingTime() > 0) return;
 
       const content =
         nudgeCountRef.current >= MAX_NUDGES_BEFORE_WRAP_UP
@@ -90,6 +94,27 @@ export function useVoiceSession() {
       nudgeCountRef.current++;
     }, SILENCE_TIMEOUT_MS);
   }, [clearSilenceTimer]);
+
+  useEffect(() => {
+    const tts = ttsRef.current;
+
+    tts.onPlayStart = () => {
+      dispatch({ type: "AGENT_SPEAKING" });
+      clearSilenceTimer();
+    };
+
+    tts.onPlayStop = () => {
+      if (!waitingForAgentAudioDrainRef.current) return;
+      waitingForAgentAudioDrainRef.current = false;
+      dispatch({ type: "AGENT_LISTENING" });
+      resetSilenceTimer();
+    };
+
+    return () => {
+      tts.onPlayStart = null;
+      tts.onPlayStop = null;
+    };
+  }, [clearSilenceTimer, resetSilenceTimer]);
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
@@ -132,35 +157,35 @@ export function useVoiceSession() {
               role: data.role,
               content: data.content,
             });
+            // User finished an utterance — start silence timer in case
+            // the agent doesn't respond (e.g. utterance too short).
+            // Timer is cleared when agent starts speaking.
+            if (!isAgent && ttsRef.current.remainingTime() <= 0) resetSilenceTimer();
             break;
           }
 
           case EVT_USER_STARTED_SPEAKING:
             dispatch({ type: "AGENT_LISTENING" });
+            waitingForAgentAudioDrainRef.current = false;
             ttsRef.current.stop();
             nudgeCountRef.current = 0;
-            resetSilenceTimer();
+            clearSilenceTimer();
             break;
 
           case EVT_AGENT_STARTED_SPEAKING:
             dispatch({ type: "AGENT_SPEAKING" });
+            waitingForAgentAudioDrainRef.current = false;
             clearSilenceTimer();
             break;
 
           case EVT_AGENT_AUDIO_DONE: {
-            // Deepgram finished sending audio, but local TTS playback may still
-            // be buffered. Delay the silence timer by the remaining playback time.
-            const remainMs = ttsRef.current.remainingTime() * 1000;
-            if (remainMs <= 0) {
+            // Wait until local playback is fully drained before opening the
+            // response window for silence nudges.
+            waitingForAgentAudioDrainRef.current = true;
+            if (ttsRef.current.remainingTime() <= 0) {
+              waitingForAgentAudioDrainRef.current = false;
               dispatch({ type: "AGENT_LISTENING" });
               resetSilenceTimer();
-            } else {
-              // Wait for playback to finish, then start silence timer
-              clearSilenceTimer();
-              silenceTimerRef.current = setTimeout(() => {
-                dispatch({ type: "AGENT_LISTENING" });
-                resetSilenceTimer();
-              }, remainMs);
             }
             break;
           }
@@ -185,6 +210,7 @@ export function useVoiceSession() {
       dispatch({ type: "CONNECT_START" });
       startTimeRef.current = Date.now();
       clearSilenceTimer();
+      waitingForAgentAudioDrainRef.current = false;
       nudgeCountRef.current = 0;
 
       try {
@@ -297,6 +323,7 @@ export function useVoiceSession() {
 
   const disconnect = useCallback(() => {
     clearSilenceTimer();
+    waitingForAgentAudioDrainRef.current = false;
     if (keepAliveRef.current) {
       clearInterval(keepAliveRef.current);
       keepAliveRef.current = null;

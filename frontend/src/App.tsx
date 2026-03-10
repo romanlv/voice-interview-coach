@@ -131,7 +131,13 @@ export default function App() {
   const [interviewer, setInterviewer] = useState("");
   const [position, setPosition] = useState("");
   const [mode, setMode] = useState<"interview" | "practice">("interview");
-  const [ttsVoice, setTtsVoice] = useState("thalia");
+  const [ttsVoice, _setTtsVoice] = useState(
+    () => localStorage.getItem("ttsVoice") ?? "thalia",
+  );
+  const setTtsVoice = (v: string) => {
+    localStorage.setItem("ttsVoice", v);
+    _setTtsVoice(v);
+  };
 
   // App state
   const [appState, setAppState] = useState<AppState>("setup");

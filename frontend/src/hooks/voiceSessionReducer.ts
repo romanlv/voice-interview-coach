@@ -41,11 +41,7 @@ export function voiceSessionReducer(
       return { ...state, connectionState: "connected", activeConfig: action.config };
 
     case "DISCONNECT":
-      return {
-        ...initialState,
-        transcripts: state.transcripts,
-        conversationHistory: state.conversationHistory,
-      };
+      return { ...initialState };
 
     case "SETTINGS_APPLIED":
       return state;
