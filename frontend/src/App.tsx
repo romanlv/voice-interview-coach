@@ -24,9 +24,51 @@ import {
   Settings,
   MessageSquareText,
   X,
-  Loader2,
 } from "lucide-react";
 import Orb from "./components/Orb";
+import LoadingScreen from "./components/LoadingScreen";
+
+const CONNECTING_MESSAGES = [
+  "Reviewing your resume...",
+  "Brewing coffee for your interviewer...",
+  "Practicing firm handshakes...",
+  "Googling 'what is your biggest weakness'...",
+  "Ironing the interviewer's suit...",
+  "Preparing thoughtful follow-up questions...",
+  "Calibrating the awkward silence detector...",
+  "Loading decades of interview wisdom...",
+  "Warming up the microphone...",
+  "Clearing the interview room...",
+  "Hiding the 'we'll call you back' script...",
+  "Polishing the whiteboard markers...",
+  "Rehearsing nodding techniques...",
+  "Stacking the motivational books...",
+  "Tuning the small-talk generator...",
+  "Inflating the interviewer's ego...",
+  "Alphabetizing behavioral questions...",
+  "Double-checking the dress code...",
+  "Sharpening pencils... digitally...",
+  "Queuing up the elevator music...",
+];
+
+const ENDING_MESSAGES = [
+  "Consulting the hiring committee...",
+  "Crunching your performance data...",
+  "Writing your recommendation letter...",
+  "Tallying up the scores...",
+  "Reviewing your body language... just kidding",
+  "Comparing notes with the panel...",
+  "Generating constructive feedback...",
+  "Calculating your interview mojo...",
+  "Counting how many times you said 'um'...",
+  "Checking if you remembered to smile...",
+  "Debating internally... it's heated...",
+  "Running your answers through the vibe check...",
+  "Measuring your confidence in decibels...",
+  "Drafting a very diplomatic email...",
+  "Asking the magic 8-ball for a second opinion...",
+  "Cross-referencing with LinkedIn... just kidding",
+];
 
 const AGENT_STATE_CONFIG: Record<
   AgentState,
@@ -76,7 +118,9 @@ const MASCULINE_VOICES = [
   { value: "zeus", label: "Zeus - Deep, Trustworthy" },
 ];
 
-type AppState = "setup" | "interview" | "results";
+type AppState = "setup" | "connecting" | "interview" | "ending" | "results";
+
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export default function App() {
   const {
@@ -109,7 +153,6 @@ export default function App() {
   // App state
   const [appState, setAppState] = useState<AppState>("setup");
   const [summary, setSummary] = useState<SessionSummary | null>(null);
-  const [isEnding, setIsEnding] = useState(false);
 
   // Interview UI state
   const [showStatus, setShowStatus] = useState(false);
@@ -153,35 +196,31 @@ export default function App() {
   }, [appState]);
 
   async function handleStart() {
+    setAppState("connecting");
     try {
-      await connect({
-        ttsVoice,
-        candidate,
-        interviewer,
-        position,
-        mode,
-      });
+      await Promise.all([
+        connect({ ttsVoice, candidate, interviewer, position, mode }),
+        delay(1500),
+      ]);
       setAppState("interview");
     } catch {
+      setAppState("setup");
       alert("Failed to connect. Check console for details.");
     }
   }
 
   async function handleEndInterview() {
-    setIsEnding(true);
+    setAppState("ending");
+    setShowStatus(false);
+    setShowTranscript(false);
     try {
       const result = await endSession();
       setSummary(result);
-      setAppState("results");
     } catch (err) {
       console.error("Failed to end session:", err);
       setSummary(null);
-      setAppState("results");
-    } finally {
-      setIsEnding(false);
-      setShowStatus(false);
-      setShowTranscript(false);
     }
+    setAppState("results");
   }
 
   function handleNewSession() {
@@ -340,14 +379,19 @@ export default function App() {
             <Button
               size="lg"
               onClick={handleStart}
-              disabled={!canStart || isConnecting}
+              disabled={!canStart}
               className="w-full rounded-full bg-emerald-500 py-6 text-lg font-semibold hover:bg-emerald-600 text-white disabled:opacity-40"
             >
               <Mic className="mr-2 h-5 w-5" />
-              {isConnecting ? "Connecting..." : "Start Interview"}
+              Start Interview
             </Button>
           </div>
         </div>
+      )}
+
+      {/* ============ CONNECTING SCREEN ============ */}
+      {appState === "connecting" && (
+        <LoadingScreen messages={CONNECTING_MESSAGES} />
       )}
 
       {/* ============ INTERVIEW SCREEN ============ */}
@@ -359,11 +403,10 @@ export default function App() {
               variant="secondary"
               size="sm"
               onClick={handleEndInterview}
-              disabled={isEnding}
               className="bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/30"
             >
               <Square className="mr-2 h-4 w-4" />
-              {isEnding ? "Ending..." : "End Interview"}
+              End Interview
             </Button>
           </div>
 
@@ -464,25 +507,14 @@ export default function App() {
               />
               {/* Agent state label */}
               <div className="flex items-center gap-2">
-                {isEnding ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin text-[#949498]" />
-                    <span className="text-sm font-medium text-[#949498]">
-                      Wrapping up...
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span
-                      className={`inline-block h-2 w-2 rounded-full animate-pulse ${agentConfig.dotColor}`}
-                    />
-                    <span
-                      className={`text-sm font-medium ${agentConfig.color}`}
-                    >
-                      {agentConfig.label}
-                    </span>
-                  </>
-                )}
+                <span
+                  className={`inline-block h-2 w-2 rounded-full animate-pulse ${agentConfig.dotColor}`}
+                />
+                <span
+                  className={`text-sm font-medium ${agentConfig.color}`}
+                >
+                  {agentConfig.label}
+                </span>
               </div>
             </div>
           </div>
@@ -546,6 +578,11 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ============ ENDING SCREEN ============ */}
+      {appState === "ending" && (
+        <LoadingScreen messages={ENDING_MESSAGES} />
       )}
 
       {/* ============ RESULTS SCREEN ============ */}
