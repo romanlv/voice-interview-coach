@@ -21,7 +21,7 @@ const deepgram = new DeepgramClient({ apiKey: DEEPGRAM_API_KEY });
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT) || 8081;
 
-const server = Bun.serve({
+Bun.serve({
   hostname: HOST,
   port: PORT,
   idleTimeout: 120,
@@ -34,10 +34,7 @@ const server = Bun.serve({
           return Response.json({ access_token: tokenData.access_token });
         } catch (err) {
           console.error("Token generation error:", err);
-          return Response.json(
-            { error: "Failed to generate token" },
-            { status: 500 },
-          );
+          return Response.json({ error: "Failed to generate token" }, { status: 500 });
         }
       },
     },
@@ -65,8 +62,7 @@ const server = Bun.serve({
             history: { role: string; content: string }[];
             startTime?: number;
           };
-          const { candidate, interviewer, position, mode, history, startTime } =
-            body;
+          const { candidate, interviewer, position, mode, history, startTime } = body;
 
           const sessionFile = await saveSession({
             candidate,
@@ -88,10 +84,7 @@ const server = Bun.serve({
           return Response.json(summary);
         } catch (err) {
           console.error("Session end error:", err);
-          return Response.json(
-            { error: "Failed to process session end" },
-            { status: 500 },
-          );
+          return Response.json({ error: "Failed to process session end" }, { status: 500 });
         }
       },
     },
@@ -102,9 +95,7 @@ const server = Bun.serve({
           const candidateSlug = url.searchParams.get("candidate") || "";
           const interviewerSlug = url.searchParams.get("interviewer") || "";
           const positionSlug = url.searchParams.get("position") || "";
-          const mode = (url.searchParams.get("mode") || "interview") as
-            | "practice"
-            | "interview";
+          const mode = (url.searchParams.get("mode") || "interview") as "practice" | "interview";
 
           const prompt = await generatePrompt({
             candidate: candidateSlug,
@@ -118,10 +109,7 @@ const server = Bun.serve({
           return Response.json({ prompt });
         } catch (err) {
           console.error("Prompt generation error:", err);
-          return Response.json(
-            { error: "Failed to generate prompt" },
-            { status: 500 },
-          );
+          return Response.json({ error: "Failed to generate prompt" }, { status: 500 });
         }
       },
     },

@@ -9,12 +9,8 @@ export function useAudioAnalysis(
   const rafRef = useRef<number>(0);
 
   useEffect(() => {
-    const agentData = agentAnalyser
-      ? new Uint8Array(agentAnalyser.frequencyBinCount)
-      : null;
-    const userData = userAnalyser
-      ? new Uint8Array(userAnalyser.frequencyBinCount)
-      : null;
+    const agentData = agentAnalyser ? new Uint8Array(agentAnalyser.frequencyBinCount) : null;
+    const userData = userAnalyser ? new Uint8Array(userAnalyser.frequencyBinCount) : null;
 
     function tick() {
       if (agentData && agentAnalyser) {

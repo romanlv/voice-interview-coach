@@ -9,6 +9,7 @@ This repository contains the shared frontend for Deepgram live transcription sta
 To use this frontend with a complete working application, see:
 
 **Node.js Starter:**
+
 - [node-live-transcription](https://github.com/deepgram-starters/node-live-transcription)
 
 **Other Languages:**

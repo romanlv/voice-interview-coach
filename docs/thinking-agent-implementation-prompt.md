@@ -4,7 +4,6 @@ Use this prompt to plan and implement the thinking agent — a self-evolving sys
 
 ---
 
-
 ## Context
 
 I'm building a **voice interview practice app**. The architecture has two AI roles:
@@ -106,25 +105,28 @@ Last updated: 2026-03-09
 
 ## Session History
 
-| Date | Interviewer | Mode | Position | Score | Focus |
-|------|-------------|------|----------|-------|-------|
-| 2026-03-09 | technical | interview | forward-engineer | 6/10 | system design, architecture |
-| 2026-03-09 | recruiter | interview | forward-engineer | 4/10 | behavioral, self-intro |
-| 2026-03-06 | technical | practice | — | 5/10 | API design |
+| Date       | Interviewer | Mode      | Position         | Score | Focus                       |
+| ---------- | ----------- | --------- | ---------------- | ----- | --------------------------- |
+| 2026-03-09 | technical   | interview | forward-engineer | 6/10  | system design, architecture |
+| 2026-03-09 | recruiter   | interview | forward-engineer | 4/10  | behavioral, self-intro      |
+| 2026-03-06 | technical   | practice  | —                | 5/10  | API design                  |
 
 ## Skill Tracker
 
 ### Strong Areas
+
 - **System architecture**: Can describe sandbox environments, recovery mechanisms, and service communication clearly when given time (technical session 03-09)
 - **Security awareness**: Understands isolation boundaries, subdomain separation, API key management (technical session 03-09)
 
 ### Needs Work
+
 - **Behavioral questions**: Deflects or avoids STAR-format answers; hasn't demonstrated a clear conflict resolution or leadership example yet (recruiter sessions)
 - **Concise delivery**: Tends to trail off mid-sentence, loses thread of explanation. Needs to practice "headline first, details second" (multiple sessions)
 - **Self-introduction**: No prepared elevator pitch. Last recruiter session went off-rails because of this (recruiter 03-09)
 - **Handling silence/pacing**: Gets frustrated when conversation flow breaks, instead of using pauses strategically (recruiter 03-09)
 
 ### Not Yet Assessed
+
 - Leadership / team management scenarios
 - Conflict resolution examples
 - Estimation and planning
@@ -145,6 +147,7 @@ Last updated: 2026-03-09
 ```
 
 The profile is a living document. Key design principles:
+
 - **Structured enough to parse**, free-form enough to capture nuance
 - **Session history table** gives quick overview without reading every transcript
 - **Skill tracker** separates strong/weak/unassessed — the thinking agent uses this to decide focus
@@ -154,7 +157,9 @@ The profile is a living document. Key design principles:
 ## Two Modes
 
 ### Practice Mode
+
 The voice agent acts as a coach. The thinking agent's pre-session run should:
+
 - Read `profile.md` — especially "Needs Work" and "Recommended Next Focus"
 - Read recent session transcripts to see what topics were already covered
 - Identify the weakest area that hasn't been practiced recently
@@ -163,7 +168,9 @@ The voice agent acts as a coach. The thinking agent's pre-session run should:
 - Reference specific past mistakes from the profile so the agent can check if the candidate improved
 
 ### Interview Mode (mock interview)
+
 The voice agent simulates a realistic interviewer. The thinking agent's pre-session run should:
+
 - Read the position requirements to understand what skills to evaluate
 - Read the candidate's resume to find relevant experience and potential gaps
 - Read the interviewer persona to adopt the right style
@@ -229,17 +236,20 @@ bun add deepagents langchain @langchain/core @langchain/langgraph @langchain/ant
 New file: `backend/src/features/thinking-agent/agent.ts`
 
 The agent should:
+
 - Use `createDeepAgent()` from `deepagents`
 - Use `ChatAnthropic` with a fast model (Claude Sonnet) — target: 3-8 seconds for pre-session, up to 15 seconds for post-session
 - Have filesystem tools (read_file, write_file, ls, glob, grep) scoped to the `data/` directory
 - Support two invocation modes:
 
 **Pre-session invocation** (generates voice agent prompt):
+
 - Input: `{ task: "pre-session", candidate, interviewer, position, mode }`
 - Reads profile.md, resume, interviewer persona, position, recent sessions as needed
 - Returns ONLY the generated system prompt string
 
 **Post-session invocation** (updates profile, returns summary):
+
 - Input: `{ task: "post-session", candidate, interviewer, position, mode, sessionFile }`
 - Reads the session transcript, current profile.md, and any other relevant context
 - WRITES updated profile.md to disk
@@ -250,6 +260,7 @@ The agent should:
 The thinking agent itself needs a system prompt. It should be the same agent with the same prompt for both pre and post session runs — the task instructions tell it what to do.
 
 The system prompt should instruct it to:
+
 - Understand the overall system: it's the brain behind a voice interview coach
 - Know that it has access to `data/` and can read/write files there
 - For pre-session tasks:
@@ -302,13 +313,24 @@ POST: async (req) => {
   const { candidate, interviewer, position, mode, history, startTime } = await req.json();
 
   // 1. Save transcript first (fast, no LLM)
-  const sessionFile = await saveSession({ candidate, interviewer, position, mode, startTime, history });
+  const sessionFile = await saveSession({
+    candidate,
+    interviewer,
+    position,
+    mode,
+    startTime,
+    history,
+  });
 
   // 2. Run thinking agent post-session (updates profile + returns summary)
   try {
     const summary = await thinkingAgent.run({
       task: "post-session",
-      candidate, interviewer, position, mode, sessionFile
+      candidate,
+      interviewer,
+      position,
+      mode,
+      sessionFile,
     });
     return Response.json(summary);
   } catch (err) {
@@ -317,16 +339,18 @@ POST: async (req) => {
     const summary = await generateSessionSummary(history);
     return Response.json(summary);
   }
-}
+};
 ```
 
 ### 6. Profile Bootstrap
 
 When a candidate has no `profile.md` yet (first session), the thinking agent should:
+
 - **Pre-session**: Work with just the resume and interviewer persona (like the current static prompt, but smarter)
 - **Post-session**: Create the initial profile.md from scratch based on what was observed
 
 When a candidate has sessions but no profile (migration from old notes.md system):
+
 - The agent should read all existing sessions and create a profile from them
 
 ### 7. Considerations
@@ -365,7 +389,5 @@ data/candidates/{slug}/
 └── sessions/
     └── YYYY-MM-DD-HHmm.md                # unchanged
 ```
-
-
 
 research: `docs/thinking-agent-research.md`

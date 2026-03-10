@@ -39,6 +39,9 @@ export function extractText(content: unknown): string {
 }
 
 export function parseJSON<T>(text: string): T {
-  const cleaned = text.trim().replace(/^```json?\n?/, "").replace(/\n?```$/, "");
+  const cleaned = text
+    .trim()
+    .replace(/^```json?\n?/, "")
+    .replace(/\n?```$/, "");
   return JSON.parse(cleaned);
 }

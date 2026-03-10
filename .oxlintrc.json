@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "unicorn", "import", "promise"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn",
+    "style": "off",
+    "pedantic": "off",
+    "restriction": "off",
+    "nursery": "off"
+  },
+  "env": {
+    "browser": true,
+    "es2024": true,
+    "node": true
+  },
+  "settings": {
+    "react": {
+      "version": "19.2"
+    }
+  },
+  "rules": {
+    "typescript/no-explicit-any": "warn",
+    "typescript/no-non-null-assertion": "warn",
+    "react/self-closing-comp": "error",
+    "import/no-cycle": "error",
+    "import/no-self-import": "error",
+    "no-debugger": "error",
+    "eqeqeq": "error",
+    "react/react-in-jsx-scope": "off"
+  },
+  "overrides": [
+    {
+      "files": ["backend/**/*.ts"],
+      "env": {
+        "browser": false,
+        "node": true
+      },
+      "plugins": ["typescript", "unicorn", "import", "promise"]
+    }
+  ],
+  "ignorePatterns": ["node_modules", "**/dist", "**/*.min.js"]
+}

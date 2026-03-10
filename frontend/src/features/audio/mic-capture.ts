@@ -1,7 +1,7 @@
-let audioContext = null;
-let mediaStream = null;
-let audioProcessor = null;
-let analyserNode = null;
+let audioContext: AudioContext | null = null;
+let mediaStream: MediaStream | null = null;
+let audioProcessor: ScriptProcessorNode | null = null;
+let analyserNode: AnalyserNode | null = null;
 
 export function getAudioContext() {
   return audioContext;
@@ -9,17 +9,20 @@ export function getAudioContext() {
 
 export async function initAudioContext() {
   if (audioContext) return audioContext;
-  audioContext = new (window.AudioContext || window.webkitAudioContext)({
+  audioContext = new ((window as any).AudioContext || (window as any).webkitAudioContext)({
     sampleRate: 16000,
   });
-  if (audioContext.state === 'suspended') {
-    await audioContext.resume();
+  if (audioContext!.state === "suspended") {
+    await audioContext!.resume();
   }
-  console.log(`Audio context initialized: ${audioContext.sampleRate}Hz`);
+  console.log(`Audio context initialized: ${audioContext!.sampleRate}Hz`);
   return audioContext;
 }
 
-export async function startMicrophone(onAudioChunk, onRms) {
+export async function startMicrophone(
+  onAudioChunk: (buffer: ArrayBuffer) => void,
+  onRms?: (rms: number) => void,
+) {
   if (mediaStream) return;
 
   mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -33,15 +36,15 @@ export async function startMicrophone(onAudioChunk, onRms) {
 
   if (!audioContext) await initAudioContext();
 
-  const source = audioContext.createMediaStreamSource(mediaStream);
-  audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+  const source = audioContext!.createMediaStreamSource(mediaStream);
+  audioProcessor = audioContext!.createScriptProcessor(4096, 1, 1);
 
-  analyserNode = audioContext.createAnalyser();
+  analyserNode = audioContext!.createAnalyser();
   analyserNode.fftSize = 256;
   source.connect(analyserNode);
 
   let chunkCount = 0;
-  audioProcessor.onaudioprocess = (e) => {
+  audioProcessor.onaudioprocess = (e: AudioProcessingEvent) => {
     const inputData = e.inputBuffer.getChannelData(0);
     const pcm16 = new Int16Array(inputData.length);
     for (let i = 0; i < inputData.length; i++) {
@@ -63,8 +66,8 @@ export async function startMicrophone(onAudioChunk, onRms) {
   };
 
   source.connect(audioProcessor);
-  audioProcessor.connect(audioContext.destination);
-  console.log('Microphone active');
+  audioProcessor.connect(audioContext!.destination);
+  console.log("Microphone active");
 }
 
 export function getMicAnalyser() {
@@ -81,7 +84,7 @@ export function stopMicrophone() {
     analyserNode = null;
   }
   if (mediaStream) {
-    mediaStream.getTracks().forEach((t) => t.stop());
+    mediaStream.getTracks().forEach((t: MediaStreamTrack) => t.stop());
     mediaStream = null;
   }
 }

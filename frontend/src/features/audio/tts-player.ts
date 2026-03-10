@@ -1,4 +1,14 @@
 export class TTSPlayer {
+  playbackCtx: AudioContext | null;
+  analyser: AnalyserNode | null;
+  nextPlayTime: number;
+  sources: AudioBufferSourceNode[];
+  remainder: Uint8Array | null;
+  onPlayStart: (() => void) | null;
+  onPlayStop: (() => void) | null;
+  _started: boolean;
+  _chunkCount: number;
+
   constructor() {
     this.playbackCtx = null;
     this.analyser = null;
@@ -8,51 +18,55 @@ export class TTSPlayer {
     this.onPlayStart = null;
     this.onPlayStop = null;
     this._started = false;
+    this._chunkCount = 0;
   }
 
   async init() {
     if (!this.playbackCtx) {
-      this.playbackCtx = new (window.AudioContext || window.webkitAudioContext)({
+      this.playbackCtx = new ((window as any).AudioContext || (window as any).webkitAudioContext)({
         sampleRate: 24000,
       });
     }
-    if (this.playbackCtx.state === 'suspended') {
-      await this.playbackCtx.resume();
+    if (this.playbackCtx!.state === "suspended") {
+      await this.playbackCtx!.resume();
     }
     return this.playbackCtx;
   }
 
-  _ensureContext() {
+  _ensureContext(): AudioContext {
     if (!this.playbackCtx) {
-      this.playbackCtx = new (window.AudioContext || window.webkitAudioContext)({
+      this.playbackCtx = new ((window as any).AudioContext || (window as any).webkitAudioContext)({
         sampleRate: 24000,
       });
     }
-    if (this.playbackCtx.state === 'suspended') {
-      this.playbackCtx.resume();
+    const ctx = this.playbackCtx!;
+    if (ctx.state === "suspended") {
+      ctx.resume();
     }
     if (!this.analyser) {
-      this.analyser = this.playbackCtx.createAnalyser();
+      this.analyser = ctx.createAnalyser();
       this.analyser.fftSize = 256;
-      this.analyser.connect(this.playbackCtx.destination);
+      this.analyser.connect(ctx.destination);
     }
-    return this.playbackCtx;
+    return ctx;
   }
 
   getAnalyser() {
     return this.analyser;
   }
 
-  playChunk(arrayBuffer) {
+  playChunk(arrayBuffer: ArrayBuffer) {
     if (!this._chunkCount) this._chunkCount = 0;
     this._chunkCount++;
     if (this._chunkCount <= 3) {
-      console.log(`TTS chunk #${this._chunkCount}: ${arrayBuffer.byteLength} bytes, ctx state: ${this.playbackCtx?.state}`);
+      console.log(
+        `TTS chunk #${this._chunkCount}: ${arrayBuffer.byteLength} bytes, ctx state: ${this.playbackCtx?.state}`,
+      );
     }
     const ctx = this._ensureContext();
 
     // Prepend any leftover byte from the previous chunk
-    let bytes;
+    let bytes: Uint8Array;
     if (this.remainder) {
       const combined = new Uint8Array(this.remainder.length + arrayBuffer.byteLength);
       combined.set(this.remainder, 0);
@@ -115,8 +129,10 @@ export class TTSPlayer {
   }
 
   stop() {
-    console.warn(`[TTS] stop() called — ${this.sources.length} active sources, ${this._chunkCount} chunks received so far`);
-    console.trace('[TTS] stop() stacktrace');
+    console.warn(
+      `[TTS] stop() called — ${this.sources.length} active sources, ${this._chunkCount} chunks received so far`,
+    );
+    console.trace("[TTS] stop() stacktrace");
     for (const source of this.sources) {
       try {
         source.stop();

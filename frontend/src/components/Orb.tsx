@@ -75,8 +75,7 @@ const bezierCurve = (ctx: Context, cp1: Point, cp2: Point, end: Point): void => 
   ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, end.x, end.y);
 };
 
-const lerp = (start: number, stop: number, amt: number): number =>
-  amt * (stop - start) + start;
+const lerp = (start: number, stop: number, amt: number): number => amt * (stop - start) + start;
 
 const easeInOutQuad = (x: number): number =>
   x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;

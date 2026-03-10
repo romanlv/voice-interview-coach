@@ -1,11 +1,11 @@
 import { useReducer, useRef, useCallback, useState } from "react";
-import { TTSPlayer } from "../features/audio/tts-player.js";
+import { TTSPlayer } from "../features/audio/tts-player";
 import {
   initAudioContext,
   startMicrophone,
   stopMicrophone,
   getMicAnalyser,
-} from "../features/audio/mic-capture.js";
+} from "../features/audio/mic-capture";
 import {
   EVT_SETTINGS_APPLIED,
   EVT_CONVERSATION_TEXT,
@@ -14,12 +14,8 @@ import {
   EVT_AGENT_AUDIO_DONE,
   EVT_END_OF_THOUGHT,
   EVT_INJECTION_REFUSED,
-} from "../features/connection/protocol.js";
-import {
-  voiceSessionReducer,
-  initialState,
-  type VoiceSessionState,
-} from "./voiceSessionReducer";
+} from "../features/connection/protocol";
+import { voiceSessionReducer, initialState, type VoiceSessionState } from "./voiceSessionReducer";
 
 export interface TranscriptItem {
   id: number;
@@ -89,6 +85,7 @@ export function useVoiceSession() {
           ? "It seems like you might need a moment. Would you like to continue, or shall we wrap up for today?"
           : "Take your time. Would you like me to rephrase the question?";
 
+      console.log({ type: "InjectAgentMessage", content });
       wsRef.current.send(JSON.stringify({ type: "InjectAgentMessage", content }));
       nudgeCountRef.current++;
     }, SILENCE_TIMEOUT_MS);
@@ -110,10 +107,13 @@ export function useVoiceSession() {
             dispatch({ type: "SETTINGS_APPLIED" });
             // Trigger initial greeting via InjectAgentMessage (bypasses LLM, goes straight to TTS)
             if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({
-                type: "InjectAgentMessage",
-                content: "Hello! Thanks for joining. To get started, could you tell me a little about yourself?",
-              }));
+              wsRef.current.send(
+                JSON.stringify({
+                  type: "InjectAgentMessage",
+                  content:
+                    "Hello! Thanks for joining. To get started, could you tell me a little about yourself?",
+                }),
+              );
             }
             break;
 
@@ -124,8 +124,7 @@ export function useVoiceSession() {
               text: data.content,
               isFinal: true,
               isAgent,
-              timestamp:
-                (isAgent ? "AI - " : "") + new Date().toLocaleTimeString(),
+              timestamp: (isAgent ? "AI - " : "") + new Date().toLocaleTimeString(),
             };
             dispatch({
               type: "ADD_CONVERSATION_TEXT",
@@ -212,10 +211,10 @@ export function useVoiceSession() {
         await initAudioContext();
 
         // 4. Connect to Deepgram Voice Agent
-        const ws = new WebSocket(
-          "wss://agent.deepgram.com/v1/agent/converse",
-          ["bearer", access_token],
-        );
+        const ws = new WebSocket("wss://agent.deepgram.com/v1/agent/converse", [
+          "bearer",
+          access_token,
+        ]);
         ws.binaryType = "arraybuffer";
         wsRef.current = ws;
 
@@ -238,7 +237,10 @@ export function useVoiceSession() {
                     provider: { type: "deepgram", model: "nova-3" },
                   },
                   think: {
-                    provider: { type: "anthropic", model: "claude-sonnet-4-6" },
+                    provider: {
+                      type: "google",
+                      model: "gemini-3-flash-preview",
+                    },
                     prompt,
                   },
                   speak: {

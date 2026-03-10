@@ -1,0 +1,15 @@
+{
+  "private": true,
+  "scripts": {
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "typecheck": "cd backend && bun run typecheck && cd ../frontend && bunx tsc --noEmit",
+    "check": "bun run lint && bun run format:check && bun run typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.6",
+    "oxlint": "^1.51.0"
+  }
+}

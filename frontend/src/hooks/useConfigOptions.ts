@@ -10,11 +10,13 @@ export function useConfigOptions() {
       fetch("api/candidates").then((r) => r.json()),
       fetch("api/interviewers").then((r) => r.json()),
       fetch("api/positions").then((r) => r.json()),
-    ]).then(([c, i, p]) => {
-      setCandidates(c);
-      setInterviewers(i);
-      setPositions(p);
-    }).catch(console.error);
+    ])
+      .then(([c, i, p]) => {
+        setCandidates(c);
+        setInterviewers(i);
+        setPositions(p);
+      })
+      .catch(console.error);
   }, []);
 
   return { candidates, interviewers, positions };

@@ -1,9 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import {
-  useVoiceSession,
-  type AgentState,
-  type SessionSummary,
-} from "./hooks/useVoiceSession";
+import { useVoiceSession, type AgentState, type SessionSummary } from "./hooks/useVoiceSession";
 import { useAudioAnalysis } from "./hooks/useAudioAnalysis";
 import { useConfigOptions } from "./hooks/useConfigOptions";
 import { Button } from "./components/ui/button";
@@ -17,14 +13,7 @@ import {
   SelectLabel,
 } from "./components/ui/select";
 import { Label } from "./components/ui/label";
-import {
-  Mic,
-  Square,
-  RotateCcw,
-  Settings,
-  MessageSquareText,
-  X,
-} from "lucide-react";
+import { Mic, Square, RotateCcw, Settings, MessageSquareText, X } from "lucide-react";
 import Orb from "./components/Orb";
 import LoadingScreen from "./components/LoadingScreen";
 
@@ -70,10 +59,7 @@ const ENDING_MESSAGES = [
   "Cross-referencing with LinkedIn... just kidding",
 ];
 
-const AGENT_STATE_CONFIG: Record<
-  AgentState,
-  { color: string; label: string; dotColor: string }
-> = {
+const AGENT_STATE_CONFIG: Record<AgentState, { color: string; label: string; dotColor: string }> = {
   LISTENING: {
     color: "text-emerald-400",
     label: "Listening",
@@ -132,14 +118,11 @@ export default function App() {
     agentAnalyser,
     userAnalyser,
     connect,
-    disconnect,
+    disconnect: _disconnect,
     endSession,
   } = useVoiceSession();
 
-  const { agentVolume, userVolume } = useAudioAnalysis(
-    agentAnalyser,
-    userAnalyser,
-  );
+  const { agentVolume, userVolume } = useAudioAnalysis(agentAnalyser, userAnalyser);
 
   const { candidates, interviewers, positions } = useConfigOptions();
 
@@ -171,10 +154,10 @@ export default function App() {
   // Auto-select first candidate/interviewer when loaded
   useEffect(() => {
     if (candidates.length > 0 && !candidate) setCandidate(candidates[0]);
-  }, [candidates]);
+  }, [candidates, candidate]);
   useEffect(() => {
     if (interviewers.length > 0 && !interviewer) setInterviewer(interviewers[0]);
-  }, [interviewers]);
+  }, [interviewers, interviewer]);
 
   // Auto-scroll transcripts
   useEffect(() => {
@@ -240,12 +223,8 @@ export default function App() {
               <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/10 ring-1 ring-emerald-500/20">
                 <Mic className="h-10 w-10 text-emerald-400" />
               </div>
-              <h1 className="mb-2 text-3xl font-bold tracking-tight">
-                AI Interview Coach
-              </h1>
-              <p className="text-[#949498]">
-                Configure your session and start practicing
-              </p>
+              <h1 className="mb-2 text-3xl font-bold tracking-tight">AI Interview Coach</h1>
+              <p className="text-[#949498]">Configure your session and start practicing</p>
             </div>
 
             <div className="space-y-5 rounded-2xl border border-white/[0.06] bg-[#111113] p-6">
@@ -253,10 +232,10 @@ export default function App() {
               <div className="space-y-2">
                 <Label className="text-[#949498]">Candidate *</Label>
                 <Select value={candidate} onValueChange={setCandidate}>
-                  <SelectTrigger className="bg-[#0b0b0c] border-[#4e4e52] text-[#edede2]">
+                  <SelectTrigger className="border-[#4e4e52] bg-[#0b0b0c] text-[#edede2]">
                     <SelectValue placeholder="Select candidate..." />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#0b0b0c] border-[#4e4e52]">
+                  <SelectContent className="border-[#4e4e52] bg-[#0b0b0c]">
                     {candidates.map((c) => (
                       <SelectItem key={c} value={c} className="text-[#edede2]">
                         {c}
@@ -270,16 +249,12 @@ export default function App() {
               <div className="space-y-2">
                 <Label className="text-[#949498]">Interviewer *</Label>
                 <Select value={interviewer} onValueChange={setInterviewer}>
-                  <SelectTrigger className="bg-[#0b0b0c] border-[#4e4e52] text-[#edede2]">
+                  <SelectTrigger className="border-[#4e4e52] bg-[#0b0b0c] text-[#edede2]">
                     <SelectValue placeholder="Select interviewer..." />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#0b0b0c] border-[#4e4e52]">
+                  <SelectContent className="border-[#4e4e52] bg-[#0b0b0c]">
                     {interviewers.map((i) => (
-                      <SelectItem
-                        key={i}
-                        value={i}
-                        className="text-[#edede2] capitalize"
-                      >
+                      <SelectItem key={i} value={i} className="capitalize text-[#edede2]">
                         {i}
                       </SelectItem>
                     ))}
@@ -294,10 +269,10 @@ export default function App() {
                   value={position || "none"}
                   onValueChange={(v) => setPosition(v === "none" ? "" : v)}
                 >
-                  <SelectTrigger className="bg-[#0b0b0c] border-[#4e4e52] text-[#edede2]">
+                  <SelectTrigger className="border-[#4e4e52] bg-[#0b0b0c] text-[#edede2]">
                     <SelectValue placeholder="None" />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#0b0b0c] border-[#4e4e52]">
+                  <SelectContent className="border-[#4e4e52] bg-[#0b0b0c]">
                     <SelectItem value="none" className="text-[#949498]">
                       None
                     </SelectItem>
@@ -316,14 +291,12 @@ export default function App() {
                   <Label className="text-[#949498]">Mode</Label>
                   <Select
                     value={mode}
-                    onValueChange={(v) =>
-                      setMode(v as "interview" | "practice")
-                    }
+                    onValueChange={(v) => setMode(v as "interview" | "practice")}
                   >
-                    <SelectTrigger className="bg-[#0b0b0c] border-[#4e4e52] text-[#edede2]">
+                    <SelectTrigger className="border-[#4e4e52] bg-[#0b0b0c] text-[#edede2]">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#0b0b0c] border-[#4e4e52]">
+                    <SelectContent className="border-[#4e4e52] bg-[#0b0b0c]">
                       <SelectItem value="interview" className="text-[#edede2]">
                         Interview
                       </SelectItem>
@@ -338,34 +311,22 @@ export default function App() {
                 <div className="space-y-2">
                   <Label className="text-[#949498]">AI Voice</Label>
                   <Select value={ttsVoice} onValueChange={setTtsVoice}>
-                    <SelectTrigger className="bg-[#0b0b0c] border-[#4e4e52] text-[#edede2]">
+                    <SelectTrigger className="border-[#4e4e52] bg-[#0b0b0c] text-[#edede2]">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#0b0b0c] border-[#4e4e52] max-h-64">
+                    <SelectContent className="max-h-64 border-[#4e4e52] bg-[#0b0b0c]">
                       <SelectGroup>
-                        <SelectLabel className="text-[#949498]">
-                          Feminine
-                        </SelectLabel>
+                        <SelectLabel className="text-[#949498]">Feminine</SelectLabel>
                         {FEMININE_VOICES.map((v) => (
-                          <SelectItem
-                            key={v.value}
-                            value={v.value}
-                            className="text-[#edede2]"
-                          >
+                          <SelectItem key={v.value} value={v.value} className="text-[#edede2]">
                             {v.label}
                           </SelectItem>
                         ))}
                       </SelectGroup>
                       <SelectGroup>
-                        <SelectLabel className="text-[#949498]">
-                          Masculine
-                        </SelectLabel>
+                        <SelectLabel className="text-[#949498]">Masculine</SelectLabel>
                         {MASCULINE_VOICES.map((v) => (
-                          <SelectItem
-                            key={v.value}
-                            value={v.value}
-                            className="text-[#edede2]"
-                          >
+                          <SelectItem key={v.value} value={v.value} className="text-[#edede2]">
                             {v.label}
                           </SelectItem>
                         ))}
@@ -380,7 +341,7 @@ export default function App() {
               size="lg"
               onClick={handleStart}
               disabled={!canStart}
-              className="w-full rounded-full bg-emerald-500 py-6 text-lg font-semibold hover:bg-emerald-600 text-white disabled:opacity-40"
+              className="w-full rounded-full bg-emerald-500 py-6 text-lg font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
             >
               <Mic className="mr-2 h-5 w-5" />
               Start Interview
@@ -390,9 +351,7 @@ export default function App() {
       )}
 
       {/* ============ CONNECTING SCREEN ============ */}
-      {appState === "connecting" && (
-        <LoadingScreen messages={CONNECTING_MESSAGES} />
-      )}
+      {appState === "connecting" && <LoadingScreen messages={CONNECTING_MESSAGES} />}
 
       {/* ============ INTERVIEW SCREEN ============ */}
       {appState === "interview" && (
@@ -403,7 +362,7 @@ export default function App() {
               variant="secondary"
               size="sm"
               onClick={handleEndInterview}
-              className="bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/30"
+              className="border border-red-500/30 bg-red-500/20 text-red-400 hover:bg-red-500/40"
             >
               <Square className="mr-2 h-4 w-4" />
               End Interview
@@ -420,11 +379,9 @@ export default function App() {
 
           {/* Status panel — collapsible top-left */}
           {showStatus && (
-            <div className="absolute left-4 top-16 z-30 w-56 rounded-xl border border-white/[0.06] bg-[#111113]/95 p-4 backdrop-blur-xl shadow-2xl">
+            <div className="absolute left-4 top-16 z-30 w-56 rounded-xl border border-white/[0.06] bg-[#111113]/95 p-4 shadow-2xl backdrop-blur-xl">
               <div className="mb-3 flex items-center justify-between">
-                <span className="text-xs font-medium text-[#949498]">
-                  Status
-                </span>
+                <span className="text-xs font-medium text-[#949498]">Status</span>
                 <button
                   onClick={() => setShowStatus(false)}
                   className="text-[#949498] hover:text-white"
@@ -441,33 +398,21 @@ export default function App() {
                   >
                     <span
                       className={`inline-block h-2 w-2 rounded-full ${
-                        isConnected
-                          ? "bg-emerald-400 animate-pulse"
-                          : "bg-[#949498]"
+                        isConnected ? "animate-pulse bg-emerald-400" : "bg-[#949498]"
                       }`}
                     />
-                    {isConnected
-                      ? "Connected"
-                      : isConnecting
-                        ? "Connecting..."
-                        : "Disconnected"}
+                    {isConnected ? "Connected" : isConnecting ? "Connecting..." : "Disconnected"}
                   </span>
                 </StatusItem>
 
                 <StatusItem label="Microphone">
-                  <span
-                    className={
-                      micActive ? "text-emerald-400" : "text-[#fbfbff]"
-                    }
-                  >
+                  <span className={micActive ? "text-emerald-400" : "text-[#fbfbff]"}>
                     {micActive ? "Active" : "Inactive"}
                   </span>
                 </StatusItem>
 
                 <StatusItem label="Agent State">
-                  <span
-                    className={`${agentConfig.color} ${isConnected ? "animate-pulse" : ""}`}
-                  >
+                  <span className={`${agentConfig.color} ${isConnected ? "animate-pulse" : ""}`}>
                     {isConnected ? agentConfig.label : "-"}
                   </span>
                 </StatusItem>
@@ -475,9 +420,7 @@ export default function App() {
                 {activeConfig && (
                   <>
                     <StatusItem label="Interviewer">
-                      <span className="capitalize">
-                        {activeConfig.interviewer}
-                      </span>
+                      <span className="capitalize">{activeConfig.interviewer}</span>
                     </StatusItem>
                     <StatusItem label="Mode">
                       <span className="capitalize">{activeConfig.mode}</span>
@@ -485,18 +428,13 @@ export default function App() {
                   </>
                 )}
 
-                <StatusItem label="Transcripts">
-                  {transcripts.length}
-                </StatusItem>
+                <StatusItem label="Transcripts">{transcripts.length}</StatusItem>
               </div>
             </div>
           )}
 
           {/* Orb — centered */}
-          <div
-            ref={orbContainerRef}
-            className="flex flex-1 items-center justify-center"
-          >
+          <div ref={orbContainerRef} className="flex flex-1 items-center justify-center">
             <div className="flex flex-col items-center gap-6">
               <Orb
                 width={orbSize.width}
@@ -508,11 +446,9 @@ export default function App() {
               {/* Agent state label */}
               <div className="flex items-center gap-2">
                 <span
-                  className={`inline-block h-2 w-2 rounded-full animate-pulse ${agentConfig.dotColor}`}
+                  className={`inline-block h-2 w-2 animate-pulse rounded-full ${agentConfig.dotColor}`}
                 />
-                <span
-                  className={`text-sm font-medium ${agentConfig.color}`}
-                >
+                <span className={`text-sm font-medium ${agentConfig.color}`}>
                   {agentConfig.label}
                 </span>
               </div>
@@ -539,9 +475,7 @@ export default function App() {
             }`}
           >
             <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
-              <span className="text-sm font-medium text-[#949498]">
-                Transcript
-              </span>
+              <span className="text-sm font-medium text-[#949498]">Transcript</span>
               <button
                 onClick={() => setShowTranscript(false)}
                 className="text-[#949498] hover:text-white"
@@ -567,9 +501,7 @@ export default function App() {
                           : "border-l-[#949498] bg-white/[0.02] opacity-60"
                     }`}
                   >
-                    <div className="mb-1.5 text-[10px] text-[#949498]">
-                      {item.timestamp}
-                    </div>
+                    <div className="mb-1.5 text-[10px] text-[#949498]">{item.timestamp}</div>
                     <div className="leading-relaxed">{item.text}</div>
                   </div>
                 ))
@@ -581,17 +513,13 @@ export default function App() {
       )}
 
       {/* ============ ENDING SCREEN ============ */}
-      {appState === "ending" && (
-        <LoadingScreen messages={ENDING_MESSAGES} />
-      )}
+      {appState === "ending" && <LoadingScreen messages={ENDING_MESSAGES} />}
 
       {/* ============ RESULTS SCREEN ============ */}
       {appState === "results" && (
         <div className="flex flex-1 items-center justify-center overflow-y-auto p-6">
           <div className="w-full max-w-lg space-y-6">
-            <h2 className="text-center text-2xl font-bold tracking-tight">
-              Session Results
-            </h2>
+            <h2 className="text-center text-2xl font-bold tracking-tight">Session Results</h2>
 
             {summary ? (
               <>
@@ -606,9 +534,7 @@ export default function App() {
 
                 {/* Strengths */}
                 <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
-                  <h3 className="mb-2 text-sm font-medium text-emerald-400">
-                    Strengths
-                  </h3>
+                  <h3 className="mb-2 text-sm font-medium text-emerald-400">Strengths</h3>
                   <ul className="space-y-1 text-sm">
                     {summary.strengths.map((s, i) => (
                       <li key={i} className="text-[#edede2]">
@@ -620,9 +546,7 @@ export default function App() {
 
                 {/* Needs Work */}
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
-                  <h3 className="mb-2 text-sm font-medium text-amber-400">
-                    Needs Work
-                  </h3>
+                  <h3 className="mb-2 text-sm font-medium text-amber-400">Needs Work</h3>
                   <ul className="space-y-1 text-sm">
                     {summary.needsWork.map((s, i) => (
                       <li key={i} className="text-[#edede2]">
@@ -634,9 +558,7 @@ export default function App() {
 
                 {/* Next Steps */}
                 <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
-                  <h3 className="mb-2 text-sm font-medium text-blue-400">
-                    Next Steps
-                  </h3>
+                  <h3 className="mb-2 text-sm font-medium text-blue-400">Next Steps</h3>
                   <ul className="space-y-1 text-sm">
                     {summary.nextSteps.map((s, i) => (
                       <li key={i} className="text-[#edede2]">
@@ -647,15 +569,13 @@ export default function App() {
                 </div>
               </>
             ) : (
-              <p className="text-center text-[#949498]">
-                Session ended. No summary available.
-              </p>
+              <p className="text-center text-[#949498]">Session ended. No summary available.</p>
             )}
 
             <Button
               size="lg"
               onClick={handleNewSession}
-              className="w-full rounded-full bg-[#4e4e52]/50 py-6 text-lg hover:bg-[#4e4e52] text-[#edede2]"
+              className="w-full rounded-full bg-[#4e4e52]/50 py-6 text-lg text-[#edede2] hover:bg-[#4e4e52]"
             >
               <RotateCcw className="mr-2 h-5 w-5" />
               Start New Session
@@ -667,13 +587,7 @@ export default function App() {
   );
 }
 
-function StatusItem({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function StatusItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="text-[0.7rem] font-medium text-[#949498]">{label}</div>

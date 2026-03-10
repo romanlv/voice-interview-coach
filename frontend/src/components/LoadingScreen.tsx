@@ -15,10 +15,7 @@ interface LoadingScreenProps {
   rotateIntervalMs?: number;
 }
 
-export default function LoadingScreen({
-  messages,
-  rotateIntervalMs = 3500,
-}: LoadingScreenProps) {
+export default function LoadingScreen({ messages, rotateIntervalMs = 3500 }: LoadingScreenProps) {
   const shuffled = useMemo(() => shuffle(messages), [messages]);
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(true);
@@ -51,17 +48,8 @@ export default function LoadingScreen({
   }, []);
 
   return (
-    <div
-      ref={containerRef}
-      className="flex flex-1 flex-col items-center justify-center gap-8"
-    >
-      <Orb
-        width={orbSize}
-        height={orbSize}
-        agentVolume={0}
-        userVolume={0}
-        status="THINKING"
-      />
+    <div ref={containerRef} className="flex flex-1 flex-col items-center justify-center gap-8">
+      <Orb width={orbSize} height={orbSize} agentVolume={0} userVolume={0} status="THINKING" />
       <p
         className={`text-lg text-[#949498] transition-opacity duration-300 ${
           visible ? "opacity-100" : "opacity-0"

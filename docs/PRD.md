@@ -26,15 +26,15 @@ A local voice-based AI tool that interviews candidates based on their resume, ra
 
 ## Stack
 
-| Layer | Choice | Reason |
-|---|---|---|
-| Runtime | Bun / TypeScript | Primary stack |
-| STT | Deepgram Nova-3 (WebSocket streaming) | Sub-300ms, native VAD, streaming-first |
-| LLM | Claude via `@anthropic-ai/sdk` (streaming) | First-class Bun support, reliable abort for barge-in, minimal footprint |
-| TTS | Deepgram Aura-2 | Single vendor, low latency, sufficient quality for v1 |
-| Backend | Bun.serve() with native WebSocket | Single server, WS proxy to Deepgram |
-| Frontend | Vite + plain HTML/JS | Separate dev server, hot reload, Deepgram styles |
-| Storage | Markdown files on disk | Simple, portable, human-readable |
+| Layer    | Choice                                     | Reason                                                                  |
+| -------- | ------------------------------------------ | ----------------------------------------------------------------------- |
+| Runtime  | Bun / TypeScript                           | Primary stack                                                           |
+| STT      | Deepgram Nova-3 (WebSocket streaming)      | Sub-300ms, native VAD, streaming-first                                  |
+| LLM      | Claude via `@anthropic-ai/sdk` (streaming) | First-class Bun support, reliable abort for barge-in, minimal footprint |
+| TTS      | Deepgram Aura-2                            | Single vendor, low latency, sufficient quality for v1                   |
+| Backend  | Bun.serve() with native WebSocket          | Single server, WS proxy to Deepgram                                     |
+| Frontend | Vite + plain HTML/JS                       | Separate dev server, hot reload, Deepgram styles                        |
+| Storage  | Markdown files on disk                     | Simple, portable, human-readable                                        |
 
 > **Note:** If Aura-2 voice quality proves insufficient after testing, swap TTS to ElevenLabs Flash — isolated to one function call.
 
@@ -109,12 +109,15 @@ The interview experience is shaped by two independent selections:
 2. **Mode** — defines the overall session structure
 
 ### Current (v1)
+
 Single mode: the AI acts as a conversational interview coach using the selected interviewer persona. It asks questions, listens, gives brief spoken feedback, and moves to the next question. All responses are plain text — no ratings or structured coaching metadata.
 
 ### Planned: Interview Mode
+
 The AI acts as a professional interviewer in character. Questions are generated based on the candidate's resume and the selected position (if any). After each answer the AI responds verbally, then rates the answer and gives a coaching tip (shown in the UI, not spoken).
 
 ### Planned: Practice Mode
+
 The candidate selects a skill or topic area. The AI runs a focused drill — more forgiving tone, more explicit coaching, encourages retries. Good for targeted preparation before a real interview.
 
 ---
@@ -147,17 +150,20 @@ All runtime data lives under `/data`. Content is markdown files — human-readab
 Each file defines an interviewer persona that shapes how the AI conducts the session — tone, question style, evaluation focus. The filename (without `.md`) is the persona ID used in session config and frontmatter.
 
 Example (`data/interviewers/technical.md`):
+
 ```markdown
 # Technical Interviewer
 
 You are a senior engineer conducting a technical interview.
 
 ## Focus
+
 - System design and architecture decisions
 - Code quality, testing, and trade-offs
 - Depth of understanding vs surface-level answers
 
 ## Style
+
 - Direct and specific follow-up questions
 - Ask "why" and "what trade-offs did you consider"
 - Neutral tone — neither encouraging nor discouraging
@@ -168,16 +174,19 @@ You are a senior engineer conducting a technical interview.
 Each file describes a target role. When selected, the position context is included in the system prompt so questions and evaluation are tailored to the role's requirements.
 
 Example (`data/positions/staff-frontend-engineer.md`):
+
 ```markdown
 # Staff Frontend Engineer
 
 ## Requirements
+
 - 8+ years frontend experience
 - React/TypeScript expertise
 - System design for large-scale SPAs
 - Cross-team technical leadership
 
 ## Focus Areas
+
 - Architecture and scalability
 - Performance optimization
 - Mentoring and technical decision-making
@@ -190,7 +199,7 @@ Sessions are immutable transcripts — one file per interview, never modified af
 ```markdown
 ---
 interviewer: technical
-position: staff-frontend-engineer       # omitted if no position selected
+position: staff-frontend-engineer # omitted if no position selected
 date: 2025-03-05T14:30:00
 duration: 23m
 score: 7.2
@@ -199,12 +208,14 @@ score: 7.2
 # Session Transcript
 
 ### Q1 — React Architecture
+
 **Interviewer:** Walk me through how you'd structure a large React app.
 **Candidate:** [transcript]
 **Rating:** 7/10
 **Tip:** Lead with the problem you were solving before describing the solution.
 
 ### Q2 — State Management
+
 **Interviewer:** How do you decide between local and global state?
 **Candidate:** [transcript]
 **Rating:** 8/10
@@ -213,6 +224,7 @@ score: 7.2
 ---
 
 ## Summary
+
 **Overall Score:** 7.2/10
 **Strongest Areas:** TypeScript, System Design
 **Needs Work:** Behavioural answers, conciseness
@@ -227,18 +239,21 @@ Per-candidate file that accumulates insights across sessions. Updated by Claude 
 # Coaching Notes — Roman
 
 ## Strengths
+
 - System design explanations are clear and structured
 - Good at relating past experience to the question
 
 ## Needs Work
+
 - Behavioral answers lack STAR structure (sessions: 2025-03-05, 2025-03-06)
 - Tends to go long — aim for 90 seconds per answer
 
 ## Session Log
-| Date | Interviewer | Position | Score |
-|------|-------------|----------|-------|
-| 2025-03-05 | technical | staff-frontend | 7.2 |
-| 2025-03-06 | recruiter | — | 6.8 |
+
+| Date       | Interviewer | Position       | Score |
+| ---------- | ----------- | -------------- | ----- |
+| 2025-03-05 | technical   | staff-frontend | 7.2   |
+| 2025-03-06 | recruiter   | —              | 6.8   |
 ```
 
 ---
@@ -269,6 +284,7 @@ Deepgram Aura-2 REST API (`POST /v1/speak?model=aura-2-en&encoding=linear16`) re
 **Backend:** Waits for Claude's full `spoken_response`, then sends it to Deepgram TTS in one call. Reads the TTS response body as a stream and forwards each chunk as a binary WebSocket message to the browser. Sends `{"type":"tts_end"}` when done. (Future optimization: split response into sentences and pipeline TTS calls for lower TTFB.)
 
 **Frontend:** Uses Web Audio API with scheduled `AudioBufferSourceNode` playback:
+
 1. Maintains a playback `AudioContext` at 24kHz (separate from the 16kHz mic capture context)
 2. On binary WS message: convert Int16 PCM → Float32, create `AudioBuffer`, schedule via `source.start(nextPlayTime)`
 3. Track `nextPlayTime` for gapless sequential playback
@@ -284,17 +300,18 @@ IDLE → LISTENING → THINKING → SPEAKING → LISTENING → ...
                   INTERRUPTED → LISTENING
 ```
 
-| State | STT | LLM | TTS | Description |
-|---|---|---|---|---|
-| IDLE | off | off | off | Not connected |
-| LISTENING | active | off | off | Waiting for user speech |
-| THINKING | active | streaming | off | `utterance_end` received, LLM generating |
-| SPEAKING | active | off | playing | TTS audio playing back |
-| INTERRUPTED | active | aborting | stopping | User barged in, cancelling response |
+| State       | STT    | LLM       | TTS      | Description                              |
+| ----------- | ------ | --------- | -------- | ---------------------------------------- |
+| IDLE        | off    | off       | off      | Not connected                            |
+| LISTENING   | active | off       | off      | Waiting for user speech                  |
+| THINKING    | active | streaming | off      | `utterance_end` received, LLM generating |
+| SPEAKING    | active | off       | playing  | TTS audio playing back                   |
+| INTERRUPTED | active | aborting  | stopping | User barged in, cancelling response      |
 
 **Turn detection:** Use Deepgram's `utterance_end` event (with `endpointing=500` param) as the primary signal that the user finished speaking. More reliable than `speech_final` for interview context where users pause mid-thought.
 
 **Barge-in (interruption):** When STT detects user speech during SPEAKING state:
+
 1. Frontend stops TTS audio playback immediately (disconnect AudioBufferSourceNodes)
 2. Frontend sends `{"type":"interrupt"}` over WebSocket
 3. Backend aborts in-flight Claude streaming and TTS generation
@@ -380,20 +397,20 @@ No authentication UI. Runs on `localhost:8081` (backend) + `localhost:5173` (Vit
 
 ## Server Endpoints (Bun.serve)
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/session` | GET | Returns a JWT for WebSocket auth |
-| `/api/metadata` | GET | Returns app title, description, repo URL |
-| `/api/voice` | WS | Full voice agent WebSocket: audio in, transcripts + TTS audio + agent responses out |
+| Endpoint        | Method | Description                                                                         |
+| --------------- | ------ | ----------------------------------------------------------------------------------- |
+| `/api/session`  | GET    | Returns a JWT for WebSocket auth                                                    |
+| `/api/metadata` | GET    | Returns app title, description, repo URL                                            |
+| `/api/voice`    | WS     | Full voice agent WebSocket: audio in, transcripts + TTS audio + agent responses out |
 
 ### Planned Endpoints
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/session/end` | POST | Triggers summary generation, updates `notes.md` |
-| `/api/candidates` | GET | Lists candidate folders |
-| `/api/interviewers` | GET | Lists available interviewer personas |
-| `/api/positions` | GET | Lists available positions (may be empty) |
+| Endpoint            | Method | Description                                     |
+| ------------------- | ------ | ----------------------------------------------- |
+| `/api/session/end`  | POST   | Triggers summary generation, updates `notes.md` |
+| `/api/candidates`   | GET    | Lists candidate folders                         |
+| `/api/interviewers` | GET    | Lists available interviewer personas            |
+| `/api/positions`    | GET    | Lists available positions (may be empty)        |
 
 > **Design decision:** The full voice pipeline (STT → Claude → TTS) runs over the single `/api/voice` WebSocket. When `utterance_end` fires, the backend triggers Claude and streams TTS audio back over the same connection. No separate endpoint for the LLM/TTS step.
 

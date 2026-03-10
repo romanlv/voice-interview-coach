@@ -47,8 +47,8 @@ Read what you need, then generate the voice agent's system prompt. Your final me
     messages: [{ role: "user", content: taskMessage }],
   });
 
-  const lastMessage = result.messages[result.messages.length - 1];
-  return extractText(lastMessage.content).trim();
+  const lastMessage = result.messages.at(-1);
+  return extractText(lastMessage!.content).trim();
 }
 
 // --- Post-session: analyze session, update profile, return summary ---
@@ -91,6 +91,6 @@ Your final message must be ONLY valid JSON with: score, strengths, needsWork, ne
     messages: [{ role: "user", content: taskMessage }],
   });
 
-  const lastMessage = result.messages[result.messages.length - 1];
-  return parseJSON<SessionSummary>(extractText(lastMessage.content));
+  const lastMessage = result.messages.at(-1);
+  return parseJSON<SessionSummary>(extractText(lastMessage!.content));
 }
