@@ -30,6 +30,7 @@ export interface SessionConfig {
   candidate: string;
   interviewer: string;
   position: string;
+  positionDescription: string;
   mode: "practice" | "interview";
 }
 
@@ -215,15 +216,18 @@ export function useVoiceSession() {
 
       try {
         // 1. Fetch system prompt
-        const promptParams = new URLSearchParams({
+        const promptBody: Record<string, string> = {
           candidate: config.candidate,
           interviewer: config.interviewer,
           mode: config.mode,
+        };
+        if (config.position) promptBody.position = config.position;
+        if (config.positionDescription) promptBody.positionDescription = config.positionDescription;
+        const promptRes = await fetch("api/prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(promptBody),
         });
-        if (config.position) {
-          promptParams.set("position", config.position);
-        }
-        const promptRes = await fetch(`api/prompt?${promptParams}`);
         if (!promptRes.ok) throw new Error(`Prompt fetch failed: ${promptRes.status}`);
         const { prompt } = await promptRes.json();
 

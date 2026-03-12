@@ -52,24 +52,41 @@ async function runAgentWithLogging(
         if (msg.tool_calls?.length) {
           for (const tc of msg.tool_calls) {
             const args = tc.args ?? {};
-            const preview = Object.entries(args)
-              .map(([k, v]) => {
-                const s = String(v);
-                return `${k}=${s.length > 80 ? s.slice(0, 80) + "…" : s}`;
-              })
-              .join(" ");
-            console.log(dim(`  ↳ ${yellow(tc.name)} ${preview}`));
+            const name = tc.name as string;
+
+            if (name === "write_todos") {
+              const todos = args.todos as any[];
+              if (Array.isArray(todos)) {
+                console.log(dim(`  ☐ ${yellow("todos")}`));
+                for (const t of todos) {
+                  const status = t.status === "completed" ? "✓" : "○";
+                  console.log(dim(`    ${status} ${t.content ?? t.description ?? JSON.stringify(t)}`));
+                }
+              }
+            } else if (name === "read_file") {
+              console.log(dim(`  ↳ ${yellow("read")} ${args.file_path}`));
+            } else if (name === "write_file") {
+              console.log(dim(`  ↳ ${yellow("write")} ${args.file_path}`));
+            } else if (name === "ls") {
+              console.log(dim(`  ↳ ${yellow("ls")} ${args.path || "/"}`));
+            } else {
+              const preview = Object.entries(args)
+                .map(([k, v]) => {
+                  const s = typeof v === "string" ? v : JSON.stringify(v);
+                  return `${k}=${s.length > 80 ? s.slice(0, 80) + "…" : s}`;
+                })
+                .join(" ");
+              console.log(dim(`  ↳ ${yellow(name)} ${preview}`));
+            }
           }
         }
 
-        // Tool results
+        // Tool results — just show errors, skip verbose output
         if (msg.name && msg.content && node === "tools") {
           const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-          const lines = content.split("\n");
-          const preview = lines.length > 3
-            ? lines.slice(0, 3).join("\n") + `\n  … (${lines.length} lines)`
-            : content;
-          console.log(dim(`  ← ${msg.name}: ${preview}`));
+          if (content.startsWith("Error")) {
+            console.log(dim(`  ✗ ${msg.name}: ${content.split("\n")[0]}`));
+          }
         }
 
         // AI text response (reasoning / final answer)
@@ -100,24 +117,29 @@ export async function generatePrompt(params: {
   candidate: string;
   interviewer: string;
   position?: string;
+  positionDescription?: string;
   mode: "practice" | "interview";
 }): Promise<string> {
-  const { candidate, interviewer, position, mode } = params;
+  const { candidate, interviewer, position, positionDescription, mode } = params;
 
   const systemPrompt =
     mode === "practice" ? PRACTICE_SYSTEM_PROMPT : INTERVIEW_SYSTEM_PROMPT;
+
+  const positionSection = positionDescription
+    ? `- **Position description** (provided inline):\n<position-description>\n${positionDescription}\n</position-description>`
+    : `- **Position**: ${position || "(none specified)"}`;
 
   const taskMessage = `Generate a system prompt for the voice agent.
 
 - **Candidate**: ${candidate}
 - **Interviewer**: ${interviewer}
-- **Position**: ${position || "(none specified)"}
+${positionSection}
 
 Relevant files:
 - \`candidates/${candidate}/profile.md\` (if exists — read this FIRST)
 - \`candidates/${candidate}/resume.md\`
 - \`interviewers/${interviewer}.md\`
-${position ? `- \`positions/${position}.md\`` : ""}
+${position && !positionDescription ? `- \`positions/${position}.md\`` : ""}
 - \`candidates/${candidate}/sessions/\` (list to see recent sessions)
 
 Read what you need, then generate the voice agent's system prompt. Your final message must be ONLY the prompt text.`;

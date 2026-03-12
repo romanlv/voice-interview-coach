@@ -89,19 +89,22 @@ Bun.serve({
       },
     },
     "/api/prompt": {
-      GET: async (req) => {
+      POST: async (req) => {
         try {
-          const url = new URL(req.url);
-          const candidateSlug = url.searchParams.get("candidate") || "";
-          const interviewerSlug = url.searchParams.get("interviewer") || "";
-          const positionSlug = url.searchParams.get("position") || "";
-          const mode = (url.searchParams.get("mode") || "interview") as "practice" | "interview";
+          const body = (await req.json()) as {
+            candidate: string;
+            interviewer: string;
+            position?: string;
+            positionDescription?: string;
+            mode?: string;
+          };
 
           const prompt = await generatePrompt({
-            candidate: candidateSlug,
-            interviewer: interviewerSlug,
-            position: positionSlug || undefined,
-            mode,
+            candidate: body.candidate || "",
+            interviewer: body.interviewer || "",
+            position: body.position || undefined,
+            positionDescription: body.positionDescription || undefined,
+            mode: (body.mode || "interview") as "practice" | "interview",
           });
 
           console.log({ prompt });

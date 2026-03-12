@@ -39,6 +39,7 @@ Steps:
 
 The generated prompt must:
 - Instruct the voice agent to never use markdown, asterisks, or any formatting — everything is spoken aloud via TTS
+- Instruct the voice agent to ask only ONE question at a time and wait for the candidate's response before moving on — never stack multiple questions in a single turn
 - Include a complete career summary of the candidate (all roles, most recent first, with company names, timeframes, and what they did) — the voice agent has no other source of information
 - Tell the voice agent to act as a supportive coach: give feedback after answers, point out what was strong and what could improve
 - Focus the session on the candidate's weak areas from their profile
@@ -64,6 +65,7 @@ Steps:
 
 The generated prompt must:
 - Instruct the voice agent to never use markdown, asterisks, or any formatting — everything is spoken aloud via TTS
+- Instruct the voice agent to ask only ONE question at a time and wait for the candidate's response before moving on — never stack multiple questions in a single turn
 - Include a complete career summary of the candidate (all roles, most recent first, with company names, timeframes, and what they did) — the voice agent has no other source of information
 - Tell the voice agent to conduct a realistic interview: no coaching, no feedback during the session, maintain professional interviewer boundaries
 - Distribute questions across the candidate's career, weighted toward recent roles

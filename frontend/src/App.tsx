@@ -130,6 +130,8 @@ export default function App() {
   const [candidate, setCandidate] = useState("");
   const [interviewer, setInterviewer] = useState("");
   const [position, setPosition] = useState("");
+  const [positionDescription, setPositionDescription] = useState("");
+  const [positonMode, setPositionMode] = useState<"text" | "select">("text");
   const [mode, setMode] = useState<"interview" | "practice">("interview");
   const [ttsVoice, _setTtsVoice] = useState(
     () => localStorage.getItem("ttsVoice") ?? "thalia",
@@ -188,7 +190,7 @@ export default function App() {
     setAppState("connecting");
     try {
       await Promise.all([
-        connect({ ttsVoice, candidate, interviewer, position, mode }),
+        connect({ ttsVoice, candidate, interviewer, position, positionDescription, mode }),
         delay(1500),
       ]);
       setAppState("interview");
@@ -270,25 +272,48 @@ export default function App() {
 
               {/* Position */}
               <div className="space-y-2">
-                <Label className="text-[#949498]">Position (optional)</Label>
-                <Select
-                  value={position || "none"}
-                  onValueChange={(v) => setPosition(v === "none" ? "" : v)}
-                >
-                  <SelectTrigger className="border-[#4e4e52] bg-[#0b0b0c] text-[#edede2]">
-                    <SelectValue placeholder="None" />
-                  </SelectTrigger>
-                  <SelectContent className="border-[#4e4e52] bg-[#0b0b0c]">
-                    <SelectItem value="none" className="text-[#949498]">
-                      None
-                    </SelectItem>
-                    {positions.map((p) => (
-                      <SelectItem key={p} value={p} className="text-[#edede2]">
-                        {p}
+                <div className="flex items-center justify-between">
+                  <Label className="text-[#949498]">Position (optional)</Label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPositionMode(positonMode === "text" ? "select" : "text");
+                      setPosition("");
+                      setPositionDescription("");
+                    }}
+                    className="text-xs text-[#949498] hover:text-emerald-400 transition-colors"
+                  >
+                    {positonMode === "text" ? "pick from saved" : "paste description"}
+                  </button>
+                </div>
+                {positonMode === "select" ? (
+                  <Select
+                    value={position || "none"}
+                    onValueChange={(v) => setPosition(v === "none" ? "" : v)}
+                  >
+                    <SelectTrigger className="border-[#4e4e52] bg-[#0b0b0c] text-[#edede2]">
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent className="border-[#4e4e52] bg-[#0b0b0c]">
+                      <SelectItem value="none" className="text-[#949498]">
+                        None
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      {positions.map((p) => (
+                        <SelectItem key={p} value={p} className="text-[#edede2]">
+                          {p}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <textarea
+                    value={positionDescription}
+                    onChange={(e) => setPositionDescription(e.target.value)}
+                    placeholder="Paste a job description here..."
+                    rows={4}
+                    className="w-full rounded-md border border-[#4e4e52] bg-[#0b0b0c] px-3 py-2 text-sm text-[#edede2] placeholder:text-[#949498]/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-y"
+                  />
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
