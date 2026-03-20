@@ -12,7 +12,7 @@ const CLAUDE_CODE_IDENTITY =
  * Required for Opus with OAuth subscription tokens.
  */
 function createOAuthFetch() {
-  return async (url: RequestInfo | URL, init?: RequestInit) => {
+  return async (url: string | URL | Request, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
 
     // Spoof user-agent
