@@ -131,7 +131,7 @@ export default function App() {
   const [interviewer, setInterviewer] = useState("");
   const [position, setPosition] = useState("");
   const [positionDescription, setPositionDescription] = useState("");
-  const [positonMode, setPositionMode] = useState<"text" | "select">("text");
+  const [positionMode, setPositionMode] = useState<"text" | "select">("text");
   const [mode, setMode] = useState<"interview" | "practice">("interview");
   const [ttsVoice, _setTtsVoice] = useState(
     () => localStorage.getItem("ttsVoice") ?? "thalia",
@@ -235,10 +235,10 @@ export default function App() {
               <p className="text-[#949498]">Configure your session and start practicing</p>
             </div>
 
-            <div className="space-y-5 rounded-2xl border border-white/[0.06] bg-[#111113] p-6">
+            <div className="space-y-5 rounded-2xl border border-white/[0.08] bg-[#111113] p-6">
               {/* Candidate */}
               <div className="space-y-2">
-                <Label className="text-[#949498]">Candidate *</Label>
+                <Label className="text-[#b0b0b4]">Candidate *</Label>
                 <Select value={candidate} onValueChange={setCandidate}>
                   <SelectTrigger className="border-[#4e4e52] bg-[#0b0b0c] text-[#edede2]">
                     <SelectValue placeholder="Select candidate..." />
@@ -255,7 +255,7 @@ export default function App() {
 
               {/* Interviewer */}
               <div className="space-y-2">
-                <Label className="text-[#949498]">Interviewer *</Label>
+                <Label className="text-[#b0b0b4]">Interviewer *</Label>
                 <Select value={interviewer} onValueChange={setInterviewer}>
                   <SelectTrigger className="border-[#4e4e52] bg-[#0b0b0c] text-[#edede2]">
                     <SelectValue placeholder="Select interviewer..." />
@@ -273,20 +273,20 @@ export default function App() {
               {/* Position */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-[#949498]">Position (optional)</Label>
+                  <Label className="text-[#b0b0b4]">Position (optional)</Label>
                   <button
                     type="button"
                     onClick={() => {
-                      setPositionMode(positonMode === "text" ? "select" : "text");
+                      setPositionMode(positionMode === "text" ? "select" : "text");
                       setPosition("");
                       setPositionDescription("");
                     }}
-                    className="text-xs text-[#949498] hover:text-emerald-400 transition-colors"
+                    className="text-xs text-emerald-400/70 hover:text-emerald-400 transition-colors underline underline-offset-2 decoration-emerald-400/30 hover:decoration-emerald-400/60"
                   >
-                    {positonMode === "text" ? "pick from saved" : "paste description"}
+                    {positionMode === "text" ? "pick from saved" : "paste description"}
                   </button>
                 </div>
-                {positonMode === "select" ? (
+                {positionMode === "select" ? (
                   <Select
                     value={position || "none"}
                     onValueChange={(v) => setPosition(v === "none" ? "" : v)}
@@ -311,15 +311,15 @@ export default function App() {
                     onChange={(e) => setPositionDescription(e.target.value)}
                     placeholder="Paste a job description here..."
                     rows={4}
-                    className="w-full rounded-md border border-[#4e4e52] bg-[#0b0b0c] px-3 py-2 text-sm text-[#edede2] placeholder:text-[#949498]/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-y"
+                    className="w-full rounded-md border border-[#4e4e52] bg-[#0b0b0c] px-3 py-2 text-sm text-[#edede2] placeholder:text-[#949498]/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-y custom-scrollbar"
                   />
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-[1fr_1.5fr] gap-4">
                 {/* Mode */}
                 <div className="space-y-2">
-                  <Label className="text-[#949498]">Mode</Label>
+                  <Label className="text-[#b0b0b4]">Mode</Label>
                   <Select
                     value={mode}
                     onValueChange={(v) => setMode(v as "interview" | "practice")}
@@ -340,7 +340,7 @@ export default function App() {
 
                 {/* Voice */}
                 <div className="space-y-2">
-                  <Label className="text-[#949498]">AI Voice</Label>
+                  <Label className="text-[#b0b0b4]">AI Voice</Label>
                   <Select value={ttsVoice} onValueChange={setTtsVoice}>
                     <SelectTrigger className="border-[#4e4e52] bg-[#0b0b0c] text-[#edede2]">
                       <SelectValue />
@@ -366,17 +366,19 @@ export default function App() {
                   </Select>
                 </div>
               </div>
-            </div>
 
-            <Button
-              size="lg"
-              onClick={handleStart}
-              disabled={!canStart}
-              className="w-full rounded-full bg-emerald-500 py-6 text-lg font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
-            >
-              <Mic className="mr-2 h-5 w-5" />
-              Start Interview
-            </Button>
+              <div className="pt-1">
+                <Button
+                  size="lg"
+                  onClick={handleStart}
+                  disabled={!canStart}
+                  className="w-full rounded-xl bg-emerald-500 py-6 text-base font-semibold text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 hover:shadow-emerald-500/30 disabled:opacity-40 disabled:shadow-none transition-all"
+                >
+                  <Mic className="mr-2 h-5 w-5" />
+                  Start Interview
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

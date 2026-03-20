@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { createDeepAgent, FilesystemBackend } from "deepagents";
-import { createModel, parseJSON } from "./model.ts";
+import { createModel, getSystemPromptPrefix, parseJSON } from "./model.ts";
 import {
   PRACTICE_SYSTEM_PROMPT,
   INTERVIEW_SYSTEM_PROMPT,
@@ -18,7 +18,7 @@ function createAgent(systemPrompt: string) {
   return createDeepAgent({
     model: createModel(),
     backend: new FilesystemBackend({ rootDir: DATA_DIR, virtualMode: true }),
-    systemPrompt,
+    systemPrompt: getSystemPromptPrefix() + systemPrompt,
   });
 }
 
