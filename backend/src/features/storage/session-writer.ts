@@ -9,6 +9,8 @@ interface SessionData {
   position?: string;
   mode: string;
   startTime: number;
+  endReason: "user" | "time";
+  durationMinutes?: number;
   history: { role: string; content: string }[];
 }
 
@@ -20,6 +22,10 @@ export async function saveSession(data: SessionData): Promise<string> {
   const pad = (n: number) => String(n).padStart(2, "0");
   const filename = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}.md`;
 
+  const elapsed = Math.round((Date.now() - data.startTime) / 1000);
+  const elapsedMin = Math.floor(elapsed / 60);
+  const elapsedSec = elapsed % 60;
+
   const frontmatter = [
     "---",
     `interviewer: ${data.interviewer}`,
@@ -27,6 +33,9 @@ export async function saveSession(data: SessionData): Promise<string> {
     data.position ? `position: ${data.position}` : null,
     `mode: ${data.mode}`,
     `date: ${date.toISOString()}`,
+    `duration: ${elapsedMin}m ${elapsedSec}s`,
+    data.durationMinutes ? `time_limit: ${data.durationMinutes}m` : null,
+    `end_reason: ${data.endReason}`,
     "---",
   ]
     .filter(Boolean)

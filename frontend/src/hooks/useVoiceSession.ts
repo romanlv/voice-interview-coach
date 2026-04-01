@@ -32,6 +32,7 @@ export interface SessionConfig {
   position: string;
   positionDescription: string;
   mode: "practice" | "interview";
+  durationMinutes: number | null;
 }
 
 export interface SessionSummary {
@@ -66,6 +67,10 @@ export function useVoiceSession() {
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nudgeCountRef = useRef<number>(0);
   const waitingForAgentAudioDrainRef = useRef<boolean>(false);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wrapUpSentRef = useRef<boolean>(false);
+  const autoEndTriggeredRef = useRef<boolean>(false);
+  const onAutoEndRef = useRef<(() => void) | null>(null);
 
   const clearSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current) {
@@ -206,6 +211,59 @@ export function useVoiceSession() {
     [resetSilenceTimer, clearSilenceTimer],
   );
 
+  const setDuration = useCallback((durationMinutes: number | null) => {
+    dispatch({ type: "SET_DURATION", durationMinutes });
+    // Reset wrap-up flag so a new threshold is respected
+    wrapUpSentRef.current = false;
+    autoEndTriggeredRef.current = false;
+  }, []);
+
+  // Elapsed time tick + duration enforcement
+  useEffect(() => {
+    if (state.connectionState !== "connected") return;
+
+    tickRef.current = setInterval(() => {
+      dispatch({ type: "TICK_ELAPSED" });
+
+      const current = stateRef.current;
+      const duration = current.activeConfig?.durationMinutes;
+      if (!duration) return;
+
+      const totalSeconds = duration * 60;
+      const elapsed = current.elapsedSeconds + 1; // +1 because dispatch hasn't flushed yet
+      const wrapUpAt = Math.floor(totalSeconds * 0.8);
+
+      // Wrap-up nudge at 80%
+      if (
+        !wrapUpSentRef.current &&
+        elapsed >= wrapUpAt &&
+        wsRef.current?.readyState === WebSocket.OPEN
+      ) {
+        wrapUpSentRef.current = true;
+        const remaining = Math.ceil((totalSeconds - elapsed) / 60);
+        wsRef.current.send(
+          JSON.stringify({
+            type: "InjectAgentMessage",
+            content: `We have about ${remaining} minute${remaining !== 1 ? "s" : ""} left. Please wrap up with a final question and then close the interview naturally.`,
+          }),
+        );
+      }
+
+      // Hard cutoff at 100%
+      if (!autoEndTriggeredRef.current && elapsed >= totalSeconds) {
+        autoEndTriggeredRef.current = true;
+        onAutoEndRef.current?.();
+      }
+    }, 1000);
+
+    return () => {
+      if (tickRef.current) {
+        clearInterval(tickRef.current);
+        tickRef.current = null;
+      }
+    };
+  }, [state.connectionState]);
+
   const connect = useCallback(
     async (config: SessionConfig) => {
       dispatch({ type: "CONNECT_START" });
@@ -213,16 +271,19 @@ export function useVoiceSession() {
       clearSilenceTimer();
       waitingForAgentAudioDrainRef.current = false;
       nudgeCountRef.current = 0;
+      wrapUpSentRef.current = false;
+      autoEndTriggeredRef.current = false;
 
       try {
         // 1. Fetch system prompt
-        const promptBody: Record<string, string> = {
+        const promptBody: Record<string, string | number> = {
           candidate: config.candidate,
           interviewer: config.interviewer,
           mode: config.mode,
         };
         if (config.position) promptBody.position = config.position;
         if (config.positionDescription) promptBody.positionDescription = config.positionDescription;
+        if (config.durationMinutes) promptBody.durationMinutes = config.durationMinutes;
         const promptRes = await fetch("api/prompt", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -332,6 +393,10 @@ export function useVoiceSession() {
       clearInterval(keepAliveRef.current);
       keepAliveRef.current = null;
     }
+    if (tickRef.current) {
+      clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
     if (wsRef.current) {
       wsRef.current.close(1000, "User disconnected");
       wsRef.current = null;
@@ -343,32 +408,37 @@ export function useVoiceSession() {
     dispatch({ type: "DISCONNECT" });
   }, [clearSilenceTimer]);
 
-  const endSession = useCallback(async (): Promise<SessionSummary | null> => {
-    const currentState = stateRef.current;
-    if (!currentState.activeConfig) return null;
+  const endSession = useCallback(
+    async (endReason: "user" | "time"): Promise<SessionSummary | null> => {
+      const currentState = stateRef.current;
+      if (!currentState.activeConfig) return null;
 
-    const history = currentState.conversationHistory;
+      const history = currentState.conversationHistory;
 
-    disconnect();
+      disconnect();
 
-    if (history.length === 0) return null;
+      if (history.length === 0) return null;
 
-    const response = await fetch("api/session/end", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        candidate: currentState.activeConfig.candidate,
-        interviewer: currentState.activeConfig.interviewer,
-        position: currentState.activeConfig.position || undefined,
-        mode: currentState.activeConfig.mode,
-        startTime: startTimeRef.current,
-        history,
-      }),
-    });
+      const response = await fetch("api/session/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidate: currentState.activeConfig.candidate,
+          interviewer: currentState.activeConfig.interviewer,
+          position: currentState.activeConfig.position || undefined,
+          mode: currentState.activeConfig.mode,
+          startTime: startTimeRef.current,
+          endReason,
+          durationMinutes: currentState.activeConfig.durationMinutes || undefined,
+          history,
+        }),
+      });
 
-    if (!response.ok) throw new Error("Failed to end session");
-    return response.json();
-  }, [disconnect]);
+      if (!response.ok) throw new Error("Failed to end session");
+      return response.json();
+    },
+    [disconnect],
+  );
 
   return {
     connectionState: state.connectionState,
@@ -376,10 +446,13 @@ export function useVoiceSession() {
     micActive: state.micActive,
     transcripts: state.transcripts,
     activeConfig: state.activeConfig,
+    elapsedSeconds: state.elapsedSeconds,
     agentAnalyser,
     userAnalyser,
     connect,
     disconnect,
     endSession,
+    setDuration,
+    onAutoEndRef,
   };
 }

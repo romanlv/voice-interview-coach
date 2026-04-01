@@ -16,10 +16,7 @@ export async function runAgentWithLogging(
   console.log(cyan(`\n▸ ${label}`));
   const start = Date.now();
 
-  const stream = await agent.stream(
-    { messages },
-    { streamMode: "updates" },
-  );
+  const stream = await agent.stream({ messages }, { streamMode: "updates" });
 
   let lastContent = "";
 
@@ -42,7 +39,9 @@ export async function runAgentWithLogging(
                 console.log(dim(`  ☐ ${yellow("todos")}`));
                 for (const t of todos) {
                   const status = t.status === "completed" ? "✓" : "○";
-                  console.log(dim(`    ${status} ${t.content ?? t.description ?? JSON.stringify(t)}`));
+                  console.log(
+                    dim(`    ${status} ${t.content ?? t.description ?? JSON.stringify(t)}`),
+                  );
                 }
               }
             } else if (name === "read_file") {
@@ -65,19 +64,27 @@ export async function runAgentWithLogging(
 
         // Tool results — just show errors, skip verbose output
         if (msg.name && msg.content && node === "tools") {
-          const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+          const content =
+            typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
           if (content.startsWith("Error")) {
             console.log(dim(`  ✗ ${msg.name}: ${content.split("\n")[0]}`));
           }
         }
 
         // AI text response (reasoning / final answer)
-        const text = typeof msg.content === "string"
-          ? msg.content
-          : Array.isArray(msg.content)
-            ? msg.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("")
-            : "";
-        if (text && msg._getType?.() === "ai" || (msg.constructor?.name === "AIMessage" && text)) {
+        const text =
+          typeof msg.content === "string"
+            ? msg.content
+            : Array.isArray(msg.content)
+              ? msg.content
+                  .filter((b: any) => b.type === "text")
+                  .map((b: any) => b.text)
+                  .join("")
+              : "";
+        if (
+          (text && msg._getType?.() === "ai") ||
+          (msg.constructor?.name === "AIMessage" && text)
+        ) {
           lastContent = text;
           // Log first 200 chars of reasoning as preview
           const preview = text.length > 200 ? text.slice(0, 200) + "…" : text;

@@ -4,8 +4,7 @@ import { ChatAnthropic } from "@langchain/anthropic";
 const useOAuth = !!process.env.ANTHROPIC_AUTH_TOKEN;
 
 const OAUTH_BETAS = ["claude-code-20250219", "oauth-2025-04-20"];
-const CLAUDE_CODE_IDENTITY =
-  "You are Claude Code, Anthropic's official CLI for Claude.";
+const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";
 
 /**
  * Intercept outgoing fetch to masquerade as Claude Code.

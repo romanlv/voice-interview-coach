@@ -27,21 +27,26 @@ export async function generatePrompt(params: {
   position?: string;
   positionDescription?: string;
   mode: "practice" | "interview";
+  durationMinutes?: number;
 }): Promise<string> {
-  const { candidate, interviewer, position, positionDescription, mode } = params;
+  const { candidate, interviewer, position, positionDescription, mode, durationMinutes } = params;
 
-  const systemPrompt =
-    mode === "practice" ? PRACTICE_SYSTEM_PROMPT : INTERVIEW_SYSTEM_PROMPT;
+  const systemPrompt = mode === "practice" ? PRACTICE_SYSTEM_PROMPT : INTERVIEW_SYSTEM_PROMPT;
 
   const positionSection = positionDescription
     ? `- **Position description** (provided inline):\n<position-description>\n${positionDescription}\n</position-description>`
     : `- **Position**: ${position || "(none specified)"}`;
+
+  const durationSection = durationMinutes
+    ? `- **Session duration**: ${durationMinutes} minutes — pace questions accordingly (aim for roughly one question per 4-5 minutes)`
+    : `- **Session duration**: No fixed limit`;
 
   const taskMessage = `Generate a system prompt for the voice agent.
 
 - **Candidate**: ${candidate}
 - **Interviewer**: ${interviewer}
 ${positionSection}
+${durationSection}
 
 Relevant files:
 - \`candidates/${candidate}/profile.md\` (if exists — read this FIRST)

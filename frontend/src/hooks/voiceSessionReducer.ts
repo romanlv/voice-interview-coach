@@ -7,6 +7,7 @@ export interface VoiceSessionState {
   transcripts: TranscriptItem[];
   conversationHistory: { role: string; content: string }[];
   activeConfig: SessionConfig | null;
+  elapsedSeconds: number;
 }
 
 export const initialState: VoiceSessionState = {
@@ -16,6 +17,7 @@ export const initialState: VoiceSessionState = {
   transcripts: [],
   conversationHistory: [],
   activeConfig: null,
+  elapsedSeconds: 0,
 };
 
 export type VoiceSessionAction =
@@ -27,7 +29,9 @@ export type VoiceSessionAction =
   | { type: "AGENT_THINKING" }
   | { type: "AGENT_SPEAKING" }
   | { type: "MIC_ACTIVE"; active: boolean }
-  | { type: "ADD_CONVERSATION_TEXT"; item: TranscriptItem; role: string; content: string };
+  | { type: "ADD_CONVERSATION_TEXT"; item: TranscriptItem; role: string; content: string }
+  | { type: "TICK_ELAPSED" }
+  | { type: "SET_DURATION"; durationMinutes: number | null };
 
 export function voiceSessionReducer(
   state: VoiceSessionState,
@@ -66,6 +70,17 @@ export function voiceSessionReducer(
           ...state.conversationHistory,
           { role: action.role, content: action.content },
         ],
+      };
+
+    case "TICK_ELAPSED":
+      return { ...state, elapsedSeconds: state.elapsedSeconds + 1 };
+
+    case "SET_DURATION":
+      return {
+        ...state,
+        activeConfig: state.activeConfig
+          ? { ...state.activeConfig, durationMinutes: action.durationMinutes }
+          : null,
       };
 
     default:

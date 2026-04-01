@@ -61,8 +61,19 @@ Bun.serve({
             mode: string;
             history: { role: string; content: string }[];
             startTime?: number;
+            endReason?: string;
+            durationMinutes?: number;
           };
-          const { candidate, interviewer, position, mode, history, startTime } = body;
+          const {
+            candidate,
+            interviewer,
+            position,
+            mode,
+            history,
+            startTime,
+            endReason,
+            durationMinutes,
+          } = body;
 
           const sessionFile = await saveSession({
             candidate,
@@ -70,6 +81,8 @@ Bun.serve({
             position,
             mode,
             startTime: startTime || Date.now(),
+            endReason: (endReason as "user" | "time") || "user",
+            durationMinutes,
             history,
           });
 
@@ -97,6 +110,7 @@ Bun.serve({
             position?: string;
             positionDescription?: string;
             mode?: string;
+            durationMinutes?: number;
           };
 
           const prompt = await generatePrompt({
@@ -105,6 +119,7 @@ Bun.serve({
             position: body.position || undefined,
             positionDescription: body.positionDescription || undefined,
             mode: (body.mode || "interview") as "practice" | "interview",
+            durationMinutes: body.durationMinutes || undefined,
           });
 
           console.log({ prompt });
